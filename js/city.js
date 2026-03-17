@@ -49,6 +49,7 @@ export const SIMULATION_CONFIG = {
   rBuildingCapacity:         6,
   cSupplyRatio:              5,
   cUndersupplyEfficiency:    0.50,
+  cShoppersPerBuilding:      35,
   fillGrowthRatePerMonth:    0.15,
   industryPollutionRadius:   6,
   industryPollutionStrength: 40,
@@ -570,7 +571,7 @@ export class City extends EventEmitter {
 
     const res       = stats.population;
     const workers   = res * CFG.residentAdultRatio;
-    const shoppers  = workers;
+    const shoppers  = res;
     const cBldg     = stats.cBuildings;
     const iBldg     = stats.iBuildings;
     const cJobs     = cBldg * CFG.cBuildingWorkers;
@@ -591,7 +592,7 @@ export class City extends EventEmitter {
     if (workers < cJobs * 0.5) workerC *= 0.3;
 
     const customerBase = res === 0 ? 0
-      : clamp(shoppers / Math.max(cBldg * 20, 1), 0, 1);
+      : clamp(shoppers / Math.max(cBldg * CFG.cShoppersPerBuilding, 1), 0, 1);
 
     let supplyChain;
     let suppliedCBuildings = 0;
@@ -1066,7 +1067,7 @@ export class City extends EventEmitter {
              bd?.c?.worker_supply?.score),
           mk('Customer base (×0.35)',
              (bd?.c?.customer_base?.score ?? 0) >= 0.5,
-             `${r(tot.shoppers)} shoppers / (${r(tot.cBldg)} shops × 20) → score ${pct(bd?.c?.customer_base?.score)}`,
+             `${r(tot.shoppers)} residents / (${r(tot.cBldg)} shops × 35) → score ${pct(bd?.c?.customer_base?.score)}`,
              bd?.c?.customer_base?.score),
           mk('Supply chain — I→C (×0.25)',
              (bd?.c?.supply_chain?.score ?? 0) >= 0.5,
