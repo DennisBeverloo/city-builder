@@ -5,7 +5,7 @@
  * drag-to-build for roads (straight lines) and zones (rectangles).
  */
 import * as THREE from 'three';
-import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid } from './scene.js';
+import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid, showRangeOverlay, hideRangeOverlay } from './scene.js';
 import { Grid }    from './grid.js';
 import { City }    from './city.js';
 import { generateTerrain, clearForestAt } from './terrain.js';
@@ -171,6 +171,28 @@ function calcRoadDragCost(tiles) {
   return { roadCount, bridgeCount, invalidCount, totalCost };
 }
 
+// ── Cost toast ───────────────────────────────────────────────────────────────
+
+const _toastVec = new THREE.Vector3();
+
+/**
+ * Spawn a floating cost label at a 3-D world position, drifting upward.
+ * @param {number} worldX @param {number} worldZ @param {number} cost
+ */
+function spawnCostToast(worldX, worldZ, cost) {
+  _toastVec.set(worldX, 0, worldZ).project(camera);
+  const rect = renderer.domElement.getBoundingClientRect();
+  const sx = (_toastVec.x + 1) / 2 * rect.width  + rect.left;
+  const sy = (-_toastVec.y + 1) / 2 * rect.height + rect.top;
+  const div = document.createElement('div');
+  div.className = 'cost-toast';
+  div.textContent = `-€${cost.toLocaleString()}`;
+  div.style.left = `${sx}px`;
+  div.style.top  = `${sy}px`;
+  document.body.appendChild(div);
+  div.addEventListener('animationend', () => div.remove(), { once: true });
+}
+
 // ── Drag-info HUD helper ─────────────────────────────────────────────────────
 
 const _dragInfoEl = document.getElementById('drag-info');
@@ -247,7 +269,22 @@ canvas.addEventListener('mousemove', e => {
       grid.setPreview(tiles, _dragActiveTool);
       showDragInfo(_dragActiveTool, tiles);
     }
+    hideRangeOverlay();
     return; // suppress hover highlight during drag
+  }
+
+  // Range overlay for radius-based buildings
+  const tool = getActiveTool();
+  if (tool?.type === 'building' && tile) {
+    const def = BUILDINGS[tool.buildingId];
+    if (def?.provides?.radius) {
+      const [w, d] = Array.isArray(def.size) ? def.size : [1, 1];
+      showRangeOverlay(tile.x + w / 2, tile.z - d / 2 + 1, def.provides.radius);
+    } else {
+      hideRangeOverlay();
+    }
+  } else {
+    hideRangeOverlay();
   }
 
   // Regular hover
@@ -283,7 +320,7 @@ canvas.addEventListener('mouseup', e => {
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (!_isDragging) grid.setHover(null);
+  if (!_isDragging) { grid.setHover(null); hideRangeOverlay(); }
 });
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -299,6 +336,14 @@ function _handleTileClick(tile, tool) {
 
   } else if (tool.type === 'building') {
     result = city.placeBuilding(tile.x, tile.z, tool.buildingId);
+    if (result?.success) {
+      const def = BUILDINGS[tool.buildingId];
+      if (def) {
+        const [w, d] = Array.isArray(def.size) ? def.size : [1, 1];
+        spawnCostToast(tile.x + w / 2, tile.z - d / 2 + 1, def.cost);
+      }
+      hideRangeOverlay();
+    }
 
   } else if (tool.type === 'demolish') {
     result = city.demolish(tile.x, tile.z);

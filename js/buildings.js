@@ -43,84 +43,84 @@ export const BUILDINGS = {
   // ── Services ─────────────────────────────────────────────────────
   police_station: {
     id: 'police_station', name: 'Police Station',
-    category: 'service', size: 1,
+    category: 'service', size: [2, 2],
     cost: 8000, monthlyUpkeep: 1500,
-    provides: { crime_reduction: 20, radius: 8 },
+    provides: { crime_reduction: 20, radius: 8, jobs: 8 },
     requires: { power: 3, water: 1 },
     color: 0x1565c0, height: 1.2,
-    unlockAtLevel: 1, description: 'Reduces crime, radius 8.',
+    unlockAtLevel: 1, description: 'Reduces crime, radius 8. 8 jobs.',
   },
   fire_station: {
     id: 'fire_station', name: 'Fire Station',
-    category: 'service', size: 1,
+    category: 'service', size: [2, 2],
     cost: 8000, monthlyUpkeep: 1500,
-    provides: { fire_protection: 20, radius: 8 },
+    provides: { fire_protection: 20, radius: 8, jobs: 6 },
     requires: { power: 2, water: 2 },
     color: 0xf44336, height: 1.2,
-    unlockAtLevel: 1, description: 'Fire protection, radius 8.',
+    unlockAtLevel: 1, description: 'Fire protection, radius 8. 6 jobs.',
   },
   hospital: {
     id: 'hospital', name: 'Hospital',
-    category: 'service', size: 1,
+    category: 'service', size: [3, 2],
     cost: 25000, monthlyUpkeep: 4000,
-    provides: { happiness: 15, radius: 12 },
+    provides: { happiness: 15, radius: 12, jobs: 25 },
     requires: { power: 5, water: 4 },
     color: 0xeceff1, height: 1.8,
-    unlockAtLevel: 2, description: '+15 happiness, radius 12.',
+    unlockAtLevel: 2, description: '+15 happiness, radius 12. 25 jobs.',
   },
   primary_school: {
     id: 'primary_school', name: 'Primary School',
-    category: 'service', size: 1,
+    category: 'service', size: [2, 2],
     cost: 5000, monthlyUpkeep: 1000,
-    provides: { edu_level: 1, happiness: 5, radius: 6 },
+    provides: { edu_level: 1, happiness: 5, radius: 6, jobs: 6 },
     requires: { power: 2, water: 1 },
     color: 0xffeb3b, height: 1.0,
-    unlockAtLevel: 1, description: '+5 happiness, edu+1, radius 6.',
+    unlockAtLevel: 1, description: '+5 happiness, edu+1, radius 6. 6 jobs.',
   },
   high_school: {
     id: 'high_school', name: 'High School',
-    category: 'service', size: 1,
+    category: 'service', size: [3, 2],
     cost: 12000, monthlyUpkeep: 2500,
-    provides: { edu_level: 2, happiness: 8, radius: 10 },
+    provides: { edu_level: 2, happiness: 8, radius: 10, jobs: 12 },
     requires: { power: 3, water: 2 },
     color: 0xff9800, height: 1.3,
-    unlockAtLevel: 2, description: '+8 happiness, edu+2, radius 10.',
+    unlockAtLevel: 2, description: '+8 happiness, edu+2, radius 10. 12 jobs.',
   },
   university: {
     id: 'university', name: 'University',
-    category: 'service', size: 1,
+    category: 'service', size: [4, 3],
     cost: 30000, monthlyUpkeep: 6000,
-    provides: { edu_level: 3, happiness: 12, radius: 15 },
+    provides: { edu_level: 3, happiness: 12, radius: 15, jobs: 40 },
     requires: { power: 8, water: 4 },
     color: 0x9c27b0, height: 2.2,
-    unlockAtLevel: 3, description: '+12 happiness, edu+3, radius 15.',
+    unlockAtLevel: 3, description: '+12 happiness, edu+3, radius 15. 40 jobs.',
   },
   park_small: {
     id: 'park_small', name: 'Small Park',
-    category: 'service', size: 1,
+    category: 'service', size: [1, 1],
     cost: 1000, monthlyUpkeep: 200,
-    provides: { happiness: 5, radius: 4 },
+    provides: { happiness: 5, radius: 4, jobs: 1 },
     requires: {},
     color: 0xa5d6a7, height: 0.2,
-    unlockAtLevel: 1, description: '+5 happiness, radius 4.',
+    unlockAtLevel: 1, description: '+5 happiness, radius 4. 1 job.',
   },
   park_medium: {
     id: 'park_medium', name: 'Medium Park',
-    category: 'service', size: 1,
+    category: 'service', size: [2, 2],
     cost: 3000, monthlyUpkeep: 500,
-    provides: { happiness: 10, radius: 7 },
+    provides: { happiness: 10, radius: 7, jobs: 3 },
     requires: {},
     color: 0x66bb6a, height: 0.25,
-    unlockAtLevel: 2, description: '+10 happiness, radius 7.',
+    unlockAtLevel: 2, description: '+10 happiness, radius 7. 3 jobs.',
   },
   park_large: {
     id: 'park_large', name: 'Large Park',
-    category: 'service', size: 1,
+    category: 'service', size: [3, 3],
     cost: 8000, monthlyUpkeep: 1200,
-    provides: { happiness: 20, radius: 12 },
+    provides: { happiness: 20, radius: 12, jobs: 6 },
     requires: {},
     color: 0x388e3c, height: 0.3,
-    unlockAtLevel: 3, description: '+20 happiness, radius 12.',
+    unlockAtLevel: 3, description: '+20 happiness, radius 12. 6 jobs.',
   },
 
   // ── Infrastructure ───────────────────────────────────────────────
@@ -134,7 +134,7 @@ export const BUILDINGS = {
   },
   generator_small: {
     id: 'generator_small', name: 'Diesel Generator',
-    category: 'infra', size: 1,
+    category: 'infra', size: [1, 1],
     cost: 3000, monthlyUpkeep: 600,
     provides: { power_kw: 150 },
     requires: {},
@@ -143,7 +143,7 @@ export const BUILDINGS = {
   },
   power_plant: {
     id: 'power_plant', name: 'Coal Power Plant',
-    category: 'infra', size: 1,
+    category: 'infra', size: [2, 2],
     cost: 10000, monthlyUpkeep: 2000,
     provides: { power_kw: 600 },
     requires: {},
@@ -152,7 +152,7 @@ export const BUILDINGS = {
   },
   solar_farm: {
     id: 'solar_farm', name: 'Solar Farm',
-    category: 'infra', size: 1,
+    category: 'infra', size: [3, 3],
     cost: 20000, monthlyUpkeep: 500,
     provides: { power_kw: 400 },
     requires: {},
@@ -161,7 +161,7 @@ export const BUILDINGS = {
   },
   nuclear_plant: {
     id: 'nuclear_plant', name: 'Nuclear Plant',
-    category: 'infra', size: 1,
+    category: 'infra', size: [3, 3],
     cost: 80000, monthlyUpkeep: 3000,
     provides: { power_kw: 2000 },
     requires: {},
@@ -170,7 +170,7 @@ export const BUILDINGS = {
   },
   water_pump_small: {
     id: 'water_pump_small', name: 'Small Water Pump',
-    category: 'infra', size: 1,
+    category: 'infra', size: [1, 1],
     cost: 2500, monthlyUpkeep: 500,
     provides: { water_units: 80 },
     requires: {},
@@ -179,7 +179,7 @@ export const BUILDINGS = {
   },
   water_pump: {
     id: 'water_pump', name: 'Water Pumping Station',
-    category: 'infra', size: 1,
+    category: 'infra', size: [2, 2],
     cost: 8000, monthlyUpkeep: 1500,
     provides: { water_units: 320 },
     requires: {},
@@ -282,8 +282,9 @@ export function createBuildingMesh(buildingId) {
   if (def.zoneType === 'C') return _createCommercialMesh(def);
   if (def.zoneType === 'I') return _createIndustrialMesh(def);
 
-  // Plain box for services, infra, roads
-  const geo  = cachedBox(0.78, def.height, 0.78);
+  // Plain box for services, infra, roads — scaled to cover the full footprint
+  const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+  const geo  = cachedBox(bw - 0.22, def.height, bd - 0.22);
   const mat  = new THREE.MeshLambertMaterial({ color: def.color });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow    = true;

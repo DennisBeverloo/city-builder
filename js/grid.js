@@ -101,6 +101,11 @@ export class Grid {
 
   _key(x, z) { return `${x}_${z}`; }
 
+  /** Return [w, d] from a building definition (handles both size:1 and size:[w,d]). */
+  _getBuildingSize(def) {
+    return Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+  }
+
   _tileColor(tile) {
     // Bridge tiles show river underneath the bridge deck
     if (tile.isBridge) return C.river;
@@ -243,43 +248,82 @@ export class Grid {
   }
 
   /**
-   * Place a service / infra building on a tile.
-   * @param {number} x @param {number} z @param {string} buildingId
+   * Place a service / infra / zone building.
+   * For multi-tile buildings (size:[w,d]), ax/az is the SW anchor corner;
+   * the footprint extends +x (east) and -z (north).
+   * All footprint tiles share one building object reference.
+   * @param {number} ax @param {number} az @param {string} buildingId
    */
-  placeBuilding(x, z, buildingId) {
-    const tile = this.getTile(x, z);
-    if (!tile || (tile.type === 'terrain' && tile.terrainType !== 'forest')) return false;
-
+  placeBuilding(ax, az, buildingId) {
     const def = BUILDINGS[buildingId];
     if (!def) return false;
 
-    if (tile.terrainType === 'forest') {
-      this._removeDecoration?.(x, z);
-      tile.terrainType = null;
+    const [w, d] = this._getBuildingSize(def);
+
+    // Collect footprint tiles and validate each
+    const footprint = [];
+    for (let dx = 0; dx < w; dx++) {
+      for (let dz = 0; dz < d; dz++) {
+        const ft = this.getTile(ax + dx, az - dz);
+        if (!ft) return false;
+        if (ft.type === 'terrain' && ft.terrainType !== 'forest') return false;
+        footprint.push(ft);
+      }
     }
 
-    if (tile.building) this._removeBuildingMesh(x, z);
+    // Remove any existing buildings that overlap the new footprint
+    const removedAnchors = new Set();
+    for (const ft of footprint) {
+      if (ft.terrainType === 'forest') {
+        this._removeDecoration?.(ft.x, ft.z);
+        ft.terrainType = null;
+      }
+      if (ft.building) {
+        const ak = this._key(ft.building.tileX, ft.building.tileZ);
+        if (!removedAnchors.has(ak)) {
+          removedAnchors.add(ak);
+          // Tear down the full old footprint
+          const [ow, od] = this._getBuildingSize(ft.building.def);
+          const oldMesh = this._bMeshes.get(ak);
+          if (oldMesh) { this._scene.remove(oldMesh); this._bMeshes.delete(ak); }
+          for (let ox = 0; ox < ow; ox++) {
+            for (let oz = 0; oz < od; oz++) {
+              const ot = this.getTile(ft.building.tileX + ox, ft.building.tileZ - oz);
+              if (ot) ot.building = null;
+            }
+          }
+        }
+        ft.building = null;
+      }
+    }
 
+    // Create mesh centred on the footprint
+    const worldCX = ax + w / 2;
+    const worldCZ = az - d / 2 + 1;
     const mesh = createBuildingMesh(buildingId);
-    mesh.position.set(x + 0.5, TILE_H / 2 + def.height / 2, z + 0.5);
+    mesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
     mesh.userData.buildingId = buildingId;
-    mesh.userData.tileX      = x;
-    mesh.userData.tileZ      = z;
+    mesh.userData.tileX      = ax;
+    mesh.userData.tileZ      = az;
     this._scene.add(mesh);
-    this._bMeshes.set(this._key(x, z), mesh);
+    this._bMeshes.set(this._key(ax, az), mesh);
 
-    tile.building = {
+    // Single building object shared by all footprint tiles
+    const building = {
       id: buildingId, def, mesh,
-      // Zone buildings start at 10% fill; service/infra are immediately at 100%.
       fillPercentage: def.zoneType ? 0.1 : 1.0,
       residents:      def.zoneType === 'R' ? (def.provides?.capacity || 0) * 0.1 : 0,
       jobs:           def.provides?.jobs || 0,
       level:          1,
-      tileX: x,  tileZ: z,
+      tileX: ax, tileZ: az,
     };
 
-    if (def.category === 'service')     tile.type = 'service';
-    else if (def.category === 'infra')  tile.type = 'infra';
+    for (const ft of footprint) {
+      ft.building = building;
+      if (def.category === 'service')    ft.type = 'service';
+      else if (def.category === 'infra') ft.type = 'infra';
+      this._restoreColor(ft);
+    }
 
     this.calculateRoadAccess();
     return true;
@@ -287,35 +331,52 @@ export class Grid {
 
   /**
    * Demolish whatever is on a tile.
-   * Bridge tiles revert to river terrain.
+   * For multi-tile buildings, any footprint tile may be passed — the whole
+   * building is removed.  Bridge tiles revert to river terrain.
    * @param {number} x @param {number} z
    */
   removeBuilding(x, z) {
     const tile = this.getTile(x, z);
     if (!tile) return false;
-    // Block demolishing raw terrain (non-bridge)
     if (tile.type === 'terrain' && !tile.isBridge) return false;
+
+    // If this is a satellite tile, redirect demolish to the anchor.
+    if (tile.building &&
+        (tile.x !== tile.building.tileX || tile.z !== tile.building.tileZ)) {
+      return this.removeBuilding(tile.building.tileX, tile.building.tileZ);
+    }
 
     const wasBridge = tile.isBridge;
 
     if (tile.building) {
+      const def = tile.building.def;
+      const [w, d] = this._getBuildingSize(def);
+
+      // Remove mesh (keyed by anchor)
       this._removeBuildingMesh(x, z);
-      tile.building = null;
+
+      // Clear every tile in the footprint
+      for (let dx = 0; dx < w; dx++) {
+        for (let dz = 0; dz < d; dz++) {
+          const ft = this.getTile(x + dx, z - dz);
+          if (!ft) continue;
+          ft.building = null;
+          if (ft.zoneType) ft.type = 'zone';
+          else             ft.type = 'empty';
+          this._restoreColor(ft);
+        }
+      }
     }
 
+    // Bridge-specific cleanup (bridges are always 1×1)
     if (wasBridge) {
-      // Restore river terrain
       tile.type        = 'terrain';
       tile.terrainType = 'river';
       tile.isBridge    = false;
       tile.zoneType    = null;
-    } else if (tile.zoneType) {
-      tile.type = 'zone';
-    } else {
-      tile.type = 'empty';
+      this._restoreColor(tile);
     }
 
-    this._restoreColor(tile);
     this.calculateRoadAccess();
     return true;
   }
@@ -360,8 +421,10 @@ export class Grid {
   /** @returns {Array<{tile, dist}>} */
   getTilesInRadius(cx, cz, radius) {
     const out = [];
-    const x0 = Math.max(0, cx - radius), x1 = Math.min(this.size - 1, cx + radius);
-    const z0 = Math.max(0, cz - radius), z1 = Math.min(this.size - 1, cz + radius);
+    const x0 = Math.max(0,             Math.floor(cx - radius));
+    const x1 = Math.min(this.size - 1, Math.ceil (cx + radius));
+    const z0 = Math.max(0,             Math.floor(cz - radius));
+    const z1 = Math.min(this.size - 1, Math.ceil (cz + radius));
     for (let z = z0; z <= z1; z++) {
       for (let x = x0; x <= x1; x++) {
         const dist = Math.abs(x - cx) + Math.abs(z - cz);
@@ -408,15 +471,22 @@ export class Grid {
       t.serviceCoverage.parks     = 0;
     }
 
-    // Apply each service building's radius
+    // Apply each service building's radius (anchor tiles only)
     for (const t of this.getAllTiles()) {
       if (!t.building || t.building.def.category !== 'service') continue;
+      // Skip satellite tiles — only process the anchor
+      if (t.x !== t.building.tileX || t.z !== t.building.tileZ) continue;
       const cfg    = map[t.building.id];
       if (!cfg) continue;
       const radius = t.building.def.provides?.radius ?? 0;
       if (!radius) continue;
 
-      for (const { tile, dist } of this.getTilesInRadius(t.x, t.z, radius)) {
+      // Use footprint centre for radius origin
+      const [w, d] = this._getBuildingSize(t.building.def);
+      const cx = t.x + (w - 1) / 2;
+      const cz = t.z - (d - 1) / 2;
+
+      for (const { tile, dist } of this.getTilesInRadius(cx, cz, radius)) {
         const falloff = 1 - (dist / radius);
         tile.serviceCoverage[cfg.field] = Math.min(100,
           tile.serviceCoverage[cfg.field] + cfg.strength * falloff);
@@ -451,10 +521,11 @@ export class Grid {
     const { industryPollutionRadius, industryPollutionStrength } = config;
     const tiles = this.getAllTiles();
 
-    // 4a: Pollution — reset then sum I-building contributions
+    // 4a: Pollution — reset then sum I-building contributions (anchor tiles only)
     for (const t of tiles) t.pollution = 0;
     for (const t of tiles) {
       if (!t.building?.def?.pollutes) continue;
+      if (t.x !== t.building.tileX || t.z !== t.building.tileZ) continue;
       for (const { tile, dist } of this.getTilesInRadius(t.x, t.z, industryPollutionRadius)) {
         const falloff = 1 - (dist / industryPollutionRadius);
         tile.pollution = Math.min(100, tile.pollution + industryPollutionStrength * falloff);
@@ -485,7 +556,7 @@ export class Grid {
   }
 
   getStats() {
-    let population = 0, totalJobs = 0, cJobs = 0, iJobs = 0;
+    let population = 0, totalJobs = 0, cJobs = 0, iJobs = 0, serviceJobs = 0;
     let powerNeeded = 0, powerAvailable = 0;
     let waterNeeded = 0, waterAvailable = 0;
     let rZones = 0, cZones = 0, iZones = 0;
@@ -500,13 +571,16 @@ export class Grid {
         else if (t.zoneType === 'I') { iZones++; if (t.building) iBuildings++; }
       }
       if (!t.building) continue;
+      // Only count the anchor tile of multi-tile buildings (satellites share the same object)
+      if (t.x !== t.building.tileX || t.z !== t.building.tileZ) continue;
       const b = t.building, def = b.def;
       allBuildings.push(b);
-      population     += b.residents || 0;     // already fill-adjusted for R buildings
+      population     += b.residents || 0;
       const jobs      = def.provides?.jobs || 0;
       totalJobs      += jobs;
-      if (def.zoneType === 'C') cJobs += jobs;
-      if (def.zoneType === 'I') iJobs += jobs;
+      if (def.zoneType === 'C')          cJobs      += jobs;
+      else if (def.zoneType === 'I')     iJobs      += jobs;
+      else if (def.category === 'service') serviceJobs += jobs;
       powerAvailable += def.provides?.power_kw    || 0;
       waterAvailable += def.provides?.water_units || 0;
       powerNeeded    += def.requires?.power       || 0;
@@ -515,7 +589,7 @@ export class Grid {
 
     avgRFill = rBuildings > 0 ? avgRFill / rBuildings : 0;
 
-    return { population, totalJobs, cJobs, iJobs,
+    return { population, totalJobs, cJobs, iJobs, serviceJobs,
              rZones, cZones, iZones, rBuildings, cBuildings, iBuildings,
              avgRFill,
              powerNeeded, powerAvailable,

@@ -319,6 +319,8 @@ export class City extends EventEmitter {
           laborStateTurns: tile.building.laborStateTurns,
           recovering:      tile.building.recovering,
           baseColor:       tile.building.baseColor,
+          tileX:           tile.building.tileX,
+          tileZ:           tile.building.tileZ,
         } : null,
       }));
 
@@ -395,6 +397,9 @@ export class City extends EventEmitter {
         if (saved.building) {
           const def = BUILDINGS[saved.building.type];
           if (def) {
+            // tileX/tileZ: fall back to tile coords for old saves (pre-multi-tile)
+            const tileX = saved.building.tileX ?? saved.x;
+            const tileZ = saved.building.tileZ ?? saved.z;
             tile.building = {
               id:              saved.building.type,
               def,
@@ -403,8 +408,8 @@ export class City extends EventEmitter {
               residents:       saved.building.residents  ?? 0,
               jobs:            saved.building.jobs       ?? (def.provides?.jobs || 0),
               level:           saved.building.level      ?? 1,
-              tileX:           saved.x,
-              tileZ:           saved.z,
+              tileX,
+              tileZ,
               laborState:      saved.building.laborState      ?? 'ok',
               laborStateTurns: saved.building.laborStateTurns ?? 0,
               recovering:      saved.building.recovering      ?? false,
@@ -415,6 +420,16 @@ export class City extends EventEmitter {
           }
         } else {
           tile.building = null;
+        }
+      }
+
+      // Link satellite tiles to their anchor's building object (multi-tile support)
+      for (const tile of this._grid.getAllTiles()) {
+        if (!tile.building) continue;
+        const { tileX, tileZ } = tile.building;
+        if (tile.x !== tileX || tile.z !== tileZ) {
+          const anchor = this._grid.getTile(tileX, tileZ);
+          if (anchor?.building) tile.building = anchor.building;
         }
       }
 
@@ -576,7 +591,7 @@ export class City extends EventEmitter {
     const iBldg     = stats.iBuildings;
     const cJobs     = cBldg * CFG.cBuildingWorkers;
     const iJobs     = iBldg * CFG.iBuildingWorkers;
-    const totalJobs = cJobs + iJobs;
+    const totalJobs = cJobs + iJobs + (stats.serviceJobs || 0);
     const rTiles    = stats.rZones;
 
     const laborEfficiency       = clamp(workers / Math.max(totalJobs, 1), 0.0, 1.0);
@@ -849,10 +864,29 @@ export class City extends EventEmitter {
       return { success: true };
     }
 
-    if (tile.type === 'terrain' && tile.terrainType !== 'forest')
-      return { success: false, reason: 'Cannot build on terrain' };
-    if (tile.building && tile.type !== 'zone')
-      return { success: false, reason: 'Tile already occupied' };
+    if (def.zoneType) {
+      // Zone buildings (auto-spawn): single-tile check only
+      if (tile.type === 'terrain' && tile.terrainType !== 'forest')
+        return { success: false, reason: 'Cannot build on terrain' };
+      if (tile.building && tile.type !== 'zone')
+        return { success: false, reason: 'Tile already occupied' };
+    } else {
+      // Service / infra: validate the full footprint
+      const [fw, fd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+      for (let dx = 0; dx < fw; dx++) {
+        for (let dz = 0; dz < fd; dz++) {
+          const ft = this._grid.getTile(x + dx, z - dz);
+          if (!ft) return { success: false, reason: 'Footprint extends out of bounds' };
+          if (ft.type === 'terrain' && ft.terrainType !== 'forest')
+            return { success: false, reason: 'Footprint overlaps water or terrain' };
+          if (ft.type === 'road')
+            return { success: false, reason: 'Footprint overlaps a road' };
+          if (ft.building)
+            return { success: false, reason: 'Footprint is already occupied' };
+        }
+      }
+    }
+
     if (this._state.money < def.cost)
       return { success: false, reason: `Not enough money (need €${def.cost})` };
 
@@ -910,6 +944,12 @@ export class City extends EventEmitter {
     if (tile.type === 'terrain' && !tile.isBridge)
                                  return { success: false, reason: 'Cannot demolish terrain' };
     if (tile.type === 'empty')   return { success: false, reason: 'Nothing to demolish' };
+
+    // If satellite tile, redirect to anchor so the whole building is removed
+    if (tile.building &&
+        (tile.x !== tile.building.tileX || tile.z !== tile.building.tileZ)) {
+      return this.demolish(tile.building.tileX, tile.building.tileZ);
+    }
 
     const wasService = tile.building?.def?.category === 'service';
     this._grid.removeBuilding(x, z);

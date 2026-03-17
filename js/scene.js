@@ -117,6 +117,57 @@ export function getCamera()   { return _camera;   }
 export function getRenderer() { return _renderer; }
 export function getControls() { return _controls; }
 
+// ── Range overlay ─────────────────────────────────────────────────────────────
+
+const _OVERLAY_MAT = new THREE.MeshBasicMaterial({
+  color: 0x4dd0e1, transparent: true, opacity: 0.30,
+  depthWrite: false, side: THREE.DoubleSide,
+});
+const _OVERLAY_GEO = new THREE.PlaneGeometry(0.92, 0.92);
+
+let _overlayPool   = [];
+let _activeOverlay = [];
+
+/**
+ * Show a semi-transparent teal overlay on all tiles within Manhattan-distance
+ * `radius` of world centre (cx, cz).
+ * @param {number} cx  World-space X centre (may be fractional for multi-tile)
+ * @param {number} cz  World-space Z centre
+ * @param {number} radius
+ */
+export function showRangeOverlay(cx, cz, radius) {
+  hideRangeOverlay();
+  const tileY = _TILE_H + 0.005;
+  const x0 = Math.max(0, Math.floor(cx - radius));
+  const x1 = Math.min(GRID_SIZE - 1, Math.ceil(cx + radius));
+  const z0 = Math.max(0, Math.floor(cz - radius));
+  const z1 = Math.min(GRID_SIZE - 1, Math.ceil(cz + radius));
+  for (let z = z0; z <= z1; z++) {
+    for (let x = x0; x <= x1; x++) {
+      const dist = Math.abs((x + 0.5) - cx) + Math.abs((z + 0.5) - cz);
+      if (dist > radius + 0.5) continue;
+      let quad = _overlayPool.pop();
+      if (!quad) {
+        quad = new THREE.Mesh(_OVERLAY_GEO, _OVERLAY_MAT);
+        quad.rotation.x = -Math.PI / 2;
+      }
+      quad.position.set(x + 0.5, tileY, z + 0.5);
+      quad.visible = true;
+      _scene.add(quad);
+      _activeOverlay.push(quad);
+    }
+  }
+}
+
+/** Remove all range-overlay quads and return them to the pool. */
+export function hideRangeOverlay() {
+  for (const quad of _activeOverlay) {
+    _scene.remove(quad);
+    _overlayPool.push(quad);
+  }
+  _activeOverlay = [];
+}
+
 // ── Post-load scene rebuild ───────────────────────────────────────────────────
 
 const _TILE_H = 0.06;
@@ -158,6 +209,8 @@ export function rebuildSceneFromGrid(grid) {
     }
 
     if (!tile.building || tile.building.mesh !== null) continue;
+    // Only create mesh for anchor tiles; satellites share the same building object
+    if (tile.x !== tile.building.tileX || tile.z !== tile.building.tileZ) continue;
 
     const { x, z } = tile;
     const { id, def } = tile.building;
@@ -167,8 +220,11 @@ export function rebuildSceneFromGrid(grid) {
       mesh = createBridgeMesh();
       mesh.position.set(x + 0.5, _TILE_H / 2, z + 0.5);
     } else {
+      const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+      const worldCX = x + bw / 2;
+      const worldCZ = z - bd / 2 + 1;
       mesh = createBuildingMesh(id);
-      mesh.position.set(x + 0.5, _TILE_H / 2 + def.height / 2, z + 0.5);
+      mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
     }
     mesh.userData.buildingId = id;
     mesh.userData.tileX      = x;
