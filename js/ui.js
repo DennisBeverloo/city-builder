@@ -27,6 +27,9 @@ export function initToolbar(city) {
   // Inject new infra buttons before binding (so event delegation picks them up)
   _injectInfraButtons(toolbar);
 
+  // Apply consistent emoji labels and tooltips to all static buttons
+  _applyButtonLabels(toolbar);
+
   // Bind each button
   toolbar.querySelectorAll('button[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -55,33 +58,95 @@ function _injectInfraButtons(toolbar) {
   const infra = powerBtn.closest('.toolbar-group');
   if (!infra) return;
 
-  const mk = (id, label) => {
+  const mk = (id, emoji, label) => {
     const def = getBuildingDef(id);
     if (!def) return null;
     const btn = document.createElement('button');
     btn.dataset.tool     = 'building';
     btn.dataset.building = id;
-    btn.textContent      = label;
-    const providesStr = def.provides?.power_kw    ? `Provides: ${def.provides.power_kw} kW`
-                      : def.provides?.water_units ? `Provides: ${def.provides.water_units} water units`
-                      : '';
-    btn.title = [def.name, `Cost: €${def.cost}`, `Upkeep: €${def.monthlyUpkeep}/mo`, providesStr]
-      .filter(Boolean).join('\n');
+    btn.textContent      = `${emoji} ${label}`;
+    const lines = [`${emoji} ${def.name}`, `Cost: €${def.cost} | Upkeep: €${def.monthlyUpkeep}/mo`];
+    if (def.provides?.power_kw)    lines.push(`Provides ${def.provides.power_kw} kW`);
+    if (def.provides?.water_units) lines.push(`Provides ${def.provides.water_units} water units`);
+    btn.title = lines.join('\n');
     if ((def.unlockAtLevel ?? 1) > 1) btn.classList.add('locked');
     return btn;
   };
 
   // Insert generator_small immediately before the coal plant button
-  const genBtn     = mk('generator_small',  'Diesel Gen');
-  const solarBtn   = mk('solar_farm',       'Solar Farm');
-  const nuclearBtn = mk('nuclear_plant',    'Nuclear');
-  const smallPump  = mk('water_pump_small', 'Small Pump');
+  const genBtn     = mk('generator_small',  '⚡',  'Diesel Gen');
+  const solarBtn   = mk('solar_farm',       '☀️',  'Solar Farm');
+  const nuclearBtn = mk('nuclear_plant',    '☢️',  'Nuclear');
+  const smallPump  = mk('water_pump_small', '💧',  'Small Pump');
 
   if (genBtn)     infra.insertBefore(genBtn,     powerBtn);
   if (solarBtn)   powerBtn.after(solarBtn);
   if (nuclearBtn) solarBtn.after(nuclearBtn);
   if (smallPump)  infra.insertBefore(smallPump,  waterBtn);
   // Road is already last in the group — no reordering needed
+}
+
+/**
+ * Apply emoji labels and rich tooltips to every static toolbar button.
+ * Called once from initToolbar after inject + before event binding.
+ */
+function _applyButtonLabels(toolbar) {
+  // ── Zone buttons ──────────────────────────────────────────────────
+  const _zoneBtn = (zone, emoji, name, buildingId, desc) => {
+    const btn = toolbar.querySelector(`[data-zone="${zone}"]`);
+    if (!btn) return;
+    const def = getBuildingDef(buildingId);
+    btn.textContent = `${emoji} ${name}`;
+    const cost = def?.cost ?? '?';
+    btn.title = `${emoji} ${name} Zone\nCost: €${cost}\n${desc}`;
+  };
+  _zoneBtn('R', '🏠', 'Residential', 'residential_low', 'Zones land for housing');
+  _zoneBtn('C', '🏪', 'Commercial',  'commercial_low',  'Zones land for shops');
+  _zoneBtn('I', '🏭', 'Industrial',  'industrial_low',  'Zones land for industry');
+
+  // ── Building buttons ──────────────────────────────────────────────
+  const _bldgBtn = (id, emoji, label, descFmt) => {
+    const btn = toolbar.querySelector(`[data-building="${id}"]`);
+    if (!btn) return;
+    const def = getBuildingDef(id);
+    btn.textContent = `${emoji} ${label}`;
+    if (!def) return;
+    let lines;
+    if (id === 'road') {
+      lines = [`${emoji} ${def.name}`, `Cost: €${def.cost} per tile`, 'Connects zones and services'];
+    } else {
+      lines = [`${emoji} ${def.name}`, `Cost: €${def.cost} | Upkeep: €${def.monthlyUpkeep}/mo`];
+      if (def.provides?.power_kw)    lines.push(`Provides ${def.provides.power_kw} kW`);
+      if (def.provides?.water_units) lines.push(`Provides ${def.provides.water_units} water units`);
+      if (descFmt && def.provides?.radius) lines.push(`${descFmt} ${def.provides.radius}`);
+      else if (descFmt)                    lines.push(descFmt);
+    }
+    btn.title = lines.join('\n');
+  };
+  _bldgBtn('police_station', '🚔', 'Police',        'Reduces crime in radius');
+  _bldgBtn('fire_station',   '🚒', 'Fire',          'Fire coverage in radius');
+  _bldgBtn('hospital',       '🏥', 'Hospital',      'Health coverage in radius');
+  _bldgBtn('primary_school', '🎒', 'Elementary',    'Education in radius');
+  _bldgBtn('high_school',    '🏫', 'High School',   'Education in radius');
+  _bldgBtn('university',     '🎓', 'University',    'Education in radius');
+  _bldgBtn('park_small',     '🌳', 'Park S',        'Happiness boost in radius');
+  _bldgBtn('park_medium',    '🌳', 'Park M',        'Happiness boost in radius');
+  _bldgBtn('park_large',     '🌳', 'Park L',        'Happiness boost in radius');
+  _bldgBtn('road',           '🛣️', 'Road',          null);
+  _bldgBtn('power_plant',    '⚡', 'Coal Plant',    null);
+  _bldgBtn('water_pump',     '💧', 'Water Station', null);
+
+  // ── Tool buttons ──────────────────────────────────────────────────
+  const demolishBtn = toolbar.querySelector('[data-tool="demolish"]');
+  if (demolishBtn) {
+    demolishBtn.textContent = '🔨 Demolish';
+    demolishBtn.title = '🔨 Demolish\nClick a tile to remove its building';
+  }
+  const selectBtn = toolbar.querySelector('[data-tool="select"]');
+  if (selectBtn) {
+    selectBtn.textContent = '🔍 Select';
+    selectBtn.title = '🔍 Select\nClick a tile to view details';
+  }
 }
 
 function _setActiveTool(btn) {
@@ -145,7 +210,9 @@ function _renderHUD(state, city) {
   const net = state.lastMonthNet ?? 0;
   const netEl = document.getElementById('stat-monthly');
   if (netEl) {
-    netEl.textContent = `📈 ${net >= 0 ? '+' : ''}€${_fmt(net)}/mo`;
+    netEl.textContent = net >= 0
+      ? `📈 +€${_fmt(net)}/mo`
+      : `📉 -€${_fmt(Math.abs(net))}/mo`;
     netEl.className   = 'stat ' + (net >= 0 ? 'ok' : 'warning');
   }
   _setText('stat-pop',      `👥 ${_fmt(state.population)}`);
@@ -163,7 +230,8 @@ function _renderHUD(state, city) {
     waterEl.className   = 'stat ' + (ww >= wn ? 'ok' : 'warning');
   }
 
-  _setText('stat-happiness', `😊 ${state.happiness}%`);
+  const happEmoji = state.happiness >= 65 ? '😊' : state.happiness >= 40 ? '😐' : '😟';
+  _setText('stat-happiness', `${happEmoji} ${state.happiness}%`);
   _setText('stat-level',     `🏙️ Lvl ${state.cityLevel}`);
 
   // RCI bars + tooltips + min-floor badges
@@ -341,32 +409,33 @@ function _refreshDebug() {
   };
 
   // RCI zone block: header + per-factor rows with scores
+  const _ZONE_LABELS = { r: '🏠 Residential', c: '🏪 Commercial', i: '🏭 Industrial' };
   const rciZoneRows = (zoneKey, demand) => {
     const zBd = bd?.[zoneKey];
-    const zoneName = zoneKey.toUpperCase();
+    const zoneName = _ZONE_LABELS[zoneKey] ?? zoneKey.toUpperCase();
     if (!zBd) return row(zoneName, `${demand}%`);
     const floorActive = zBd.floor > 0 && demand <= zBd.floor;
     const factorRows = Object.entries(zBd)
       .filter(([, v]) => v !== null && typeof v === 'object' && 'score' in v)
       .map(([key, f]) => {
         const threshold = _FACTOR_THRESHOLDS[key] ?? 0.50;
-        const good = f.score >= threshold ? '✓' : '✗';
+        const good = f.score >= threshold ? '✅' : '❌';
         const cls  = f.score >= threshold ? 'dbg-good' : 'dbg-bad';
         const note = _factorNote(zoneKey, key, f, tot);
         return `<div class="dbg-row" title="${note}"><span class="dbg-label" style="padding-left:8px">${key} ×${f.weight}</span><span class="dbg-value ${cls}">${f.score.toFixed(2)} ${good}</span></div>`;
       }).join('');
     const floorRow = floorActive
-      ? `<div class="dbg-row"><span class="dbg-label" style="padding-left:8px;color:#555">↑ bootstrap floor active</span></div>`
+      ? `<div class="dbg-row"><span class="dbg-label" style="padding-left:8px;color:#555">🔰 bootstrap floor active</span></div>`
       : '';
     return row(zoneName, `${demand}%`) + factorRows + floorRow;
   };
 
   body.innerHTML = [
-    sect('Population'),
+    sect('👥 Population'),
     row('Residents',    `${Math.round(stats.population)}`),
     row('R fill (avg)', `${Math.round((stats.avgRFill ?? 0) * 100)}%`),
 
-    sect('Labour Market'),
+    sect('💼 Labour Market'),
     row('Workers',          `${workers}`),
     row('C-jobs',           `${cJobs}`),
     row('I-jobs',           `${iJobs}`),
@@ -390,12 +459,12 @@ function _refreshDebug() {
       return row('C/I demand ×', `${pct}%`, 'dbg-bad');
     })(),
 
-    sect('Zones'),
+    sect('🗺️ Zones'),
     row('R', `${stats.rBuildings} bldg / ${stats.rZones} zoned`),
     row('C', `${stats.cBuildings} / ${stats.cZones}`),
     row('I', `${stats.iBuildings} / ${stats.iZones}`),
 
-    sect('Infrastructure'),
+    sect('⚙️ Infrastructure'),
     row('Power available',  `${Math.round(s.totalPowerAvailable)} kW`),
     row('Power needed',     `${Math.round(s.totalPowerNeeded)} kW`),
     row('Power surplus',    `${Math.round(s.totalPowerAvailable - s.totalPowerNeeded)} kW`,
@@ -411,12 +480,12 @@ function _refreshDebug() {
       return row('Infra efficiency', `${ie}%`, 'dbg-bad');
     })(),
 
-    sect('RCI Demand'),
+    sect('📊 RCI Demand'),
     rciZoneRows('r', Math.round(s.rciDemand.R)),
     rciZoneRows('c', Math.round(s.rciDemand.C)),
     rciZoneRows('i', Math.round(s.rciDemand.I)),
 
-    sect('Economy'),
+    sect('💵 Finances'),
     row('Balance',   `€${_fmt(s.money)}`),
     row('Last net',  `${s.lastMonthNet >= 0 ? '+' : ''}€${_fmt(s.lastMonthNet)}`, s.lastMonthNet >= 0 ? 'dbg-good' : 'dbg-bad'),
     row('Happiness', `${Math.round(s.happiness)}%`),
@@ -450,15 +519,15 @@ export function showTileInfo(tile) {
   } else if (tile.type === 'empty') {
     title.textContent = 'Empty Land';
     rows.push(['Status', 'Available for zoning']);
-    rows.push(['Road access', tile.connected ? 'Yes ✓' : 'No']);
+    rows.push(['🛣️ Road access', tile.connected ? 'Yes ✓' : 'No']);
   } else if (tile.type === 'road') {
     title.textContent = 'Road';
     rows.push(['Type', 'Infrastructure']);
   } else if (tile.type === 'zone' && !tile.building) {
     title.textContent = `${tile.zoneType} Zone (empty)`;
-    rows.push(['Zone',         tile.zoneType]);
-    rows.push(['Road access',  tile.connected ? 'Yes ✓' : 'No ✗']);
-    rows.push(['Happiness',    `${Math.round(tile.happiness)}%`]);
+    rows.push(['Zone',              tile.zoneType]);
+    rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
+    rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
   } else if (tile.building) {
     const b   = tile.building;
     const def = b.def;
@@ -467,10 +536,10 @@ export function showTileInfo(tile) {
     if (tile.zoneType) rows.push(['Zone', tile.zoneType]);
     if (b.residents)   rows.push(['Residents', Math.round(b.residents)]);
     if (def.provides?.jobs) rows.push(['Jobs', def.provides.jobs]);
-    rows.push(['Level',       b.level]);
-    rows.push(['Upkeep',      `€${def.monthlyUpkeep}/mo`]);
-    rows.push(['Road access',  tile.connected ? 'Yes ✓' : 'No ✗']);
-    rows.push(['Happiness',    `${Math.round(tile.happiness)}%`]);
+    rows.push(['🏙️ Level',         b.level]);
+    rows.push(['💵 Upkeep',        `€${def.monthlyUpkeep}/mo`]);
+    rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
+    rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
     if (def.description) rows.push(['Info', def.description]);
   }
 
@@ -485,16 +554,18 @@ export function showTileInfo(tile) {
     const ls = b2.laborState;
 
     if (ls === 'struggling') {
-      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#ff9800">⚠ Struggling</span></div>`;
+      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#ff9800">⚠️ Struggling</span></div>`;
       html += `<div class="row"><span class="label">Cause</span><span class="value">Not enough workers</span></div>`;
       html += `<div class="row"><span class="label">Recovery</span><span class="value">Increase residential zones</span></div>`;
     } else if (ls === 'abandoned') {
-      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#e57373">✖ Abandoned</span></div>`;
+      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#e57373">💀 Abandoned</span></div>`;
       html += `<div class="row"><span class="label">Cause</span><span class="value">Not enough workers</span></div>`;
       html += `<div class="row"><span class="label">Recovery</span><span class="value">Increase residential zones to attract workers</span></div>`;
     } else if (b2.recovering) {
-      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#aed581">↑ Recovering</span></div>`;
+      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#aed581">💚 Recovering</span></div>`;
       html += `<div class="row"><span class="label">Cause</span><span class="value">Workers returning — full recovery next month if efficiency holds</span></div>`;
+    } else {
+      html += `<div class="row"><span class="label">Status</span><span class="value" style="color:#81c784">✅ Operational</span></div>`;
     }
   }
 
@@ -585,6 +656,18 @@ let _wasAlreadyPaused = false;
  * @param {import('./city.js').City} city
  */
 export function initPauseMenu(city) {
+  // Apply consistent emoji labels to pause menu buttons.
+  const _setBtn = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  _setBtn('btn-save-expand',    '💾 Save Game');
+  _setBtn('btn-load-expand',    '📂 Load Game');
+  _setBtn('btn-resume',         '▶️ Resume');
+  _setBtn('btn-new-game',       '🔄 New Game');
+  _setBtn('btn-new-game-confirm', '⚠️ Confirm New Game');
+  _setBtn('btn-new-game-cancel',  '✖️ Cancel');
+
   window.addEventListener('keydown', e => {
     if (e.code !== 'Escape') return;
     // If modal is open, close it instead.
