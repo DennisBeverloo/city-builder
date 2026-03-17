@@ -30,7 +30,7 @@ export function initToolbar(city) {
   // Apply consistent emoji labels and tooltips to all static buttons
   _applyButtonLabels(toolbar);
 
-  // Bind each button
+  // Bind each button (before flyouts move them, so listeners travel with elements)
   toolbar.querySelectorAll('button[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.classList.contains('locked')) return;
@@ -44,6 +44,9 @@ export function initToolbar(city) {
 
   // Unlock buttons on level-up
   city.on('levelUp', ({ level }) => _applyUnlocks(level));
+
+  // Collapse Services and Infra into flyout menus (must be last — after listeners)
+  _initFlyoutGroups(toolbar);
 }
 
 /**
@@ -149,9 +152,74 @@ function _applyButtonLabels(toolbar) {
   }
 }
 
+// ── Flyout menus ─────────────────────────────────────────────────────────────
+
+/**
+ * Transform the Services and Infra toolbar groups into single toggle buttons
+ * whose building buttons live in floating flyout panels above the toolbar.
+ */
+function _initFlyoutGroups(toolbar) {
+  const servicesGroup = document.getElementById('group-services');
+  // Infra group has no id — find it by the road button it contains.
+  const infraGroup = toolbar.querySelector('[data-building="road"]')?.closest('.toolbar-group');
+
+  if (servicesGroup) _makeFlyout(servicesGroup, '🏛️', 'Services', 'flyout-services');
+  if (infraGroup)    _makeFlyout(infraGroup,    '🏗️', 'Infra',    'flyout-infra');
+
+  // Click anywhere outside a flyout or its toggle closes all open flyouts.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.toolbar-flyout') && !e.target.closest('.toolbar-menu-toggle')) {
+      document.querySelectorAll('.toolbar-flyout:not(.hidden)').forEach(f => f.classList.add('hidden'));
+    }
+  });
+}
+
+/**
+ * Convert a toolbar group into a toggle button + detached flyout panel.
+ * All existing <button> children are moved into the flyout.
+ */
+function _makeFlyout(groupEl, emoji, label, flyoutId) {
+  const buttons = [...groupEl.querySelectorAll('button')];
+
+  // Build the flyout panel and populate it.
+  const flyout = document.createElement('div');
+  flyout.id        = flyoutId;
+  flyout.className = 'toolbar-flyout hidden';
+
+  const flyoutLabel = document.createElement('div');
+  flyoutLabel.className   = 'flyout-label';
+  flyoutLabel.textContent = label;
+  flyout.appendChild(flyoutLabel);
+
+  buttons.forEach(btn => flyout.appendChild(btn));
+  document.body.appendChild(flyout);
+
+  // Replace group content with a single toggle button.
+  groupEl.innerHTML = '';
+  const toggle = document.createElement('button');
+  toggle.className            = 'toolbar-menu-toggle';
+  toggle.dataset.flyout       = flyoutId;
+  toggle.dataset.defaultLabel = `${emoji} ${label} ▾`;
+  toggle.textContent          = `${emoji} ${label} ▾`;
+  groupEl.appendChild(toggle);
+
+  // Open / close on toggle click.
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = !flyout.classList.contains('hidden');
+    document.querySelectorAll('.toolbar-flyout').forEach(f => f.classList.add('hidden'));
+    if (!isOpen) {
+      const rect          = toggle.getBoundingClientRect();
+      flyout.style.left   = `${rect.left}px`;
+      flyout.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+      flyout.classList.remove('hidden');
+    }
+  });
+}
+
 function _setActiveTool(btn) {
-  // Clear previous active
-  document.querySelectorAll('#toolbar button.active').forEach(b => b.classList.remove('active'));
+  // Clear previous active across toolbar AND flyout divs.
+  document.querySelectorAll('button[data-tool].active').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
   const toolType = btn.dataset.tool;
@@ -164,11 +232,24 @@ function _setActiveTool(btn) {
   } else if (toolType === 'select') {
     _activeTool = { type: 'select' };
   }
+
+  // Close any open flyout and sync toggle button labels.
+  document.querySelectorAll('.toolbar-flyout').forEach(f => f.classList.add('hidden'));
+  document.querySelectorAll('.toolbar-menu-toggle').forEach(toggle => {
+    const flyout = document.getElementById(toggle.dataset.flyout);
+    if (!flyout) return;
+    const activeBtn = flyout.querySelector('button.active');
+    toggle.textContent = activeBtn
+      ? `${activeBtn.textContent} ▾`
+      : toggle.dataset.defaultLabel;
+    toggle.classList.toggle('menu-group-active', !!activeBtn);
+  });
 }
 
-/** Unlock toolbar buttons for the given city level. */
+/** Unlock toolbar / flyout buttons for the given city level. */
 function _applyUnlocks(level) {
-  document.querySelectorAll('#toolbar button[data-building]').forEach(btn => {
+  // Search everywhere — buttons may have been moved into flyout divs.
+  document.querySelectorAll('button[data-building]').forEach(btn => {
     const id  = btn.dataset.building;
     const def = getBuildingDef(id);
     if (def && def.unlockAtLevel <= level) {
@@ -615,20 +696,23 @@ export function initNotifications(city) {
  * @param {import('./city.js').City} city
  */
 export function initSpeedControls(city) {
-  const toolbar = document.getElementById('toolbar');
-  if (!toolbar) return;
+  const bar = document.getElementById('bottom-bar');
+  if (!bar) return;
 
   const group = document.createElement('div');
-  group.className = 'toolbar-group';
-  group.id = 'speed-group';
+  group.id        = 'speed-group';
+  group.className = 'speed-group';
   group.innerHTML = `
-    <span class="toolbar-label">Speed</span>
-    <button data-speed="paused" title="Pause">⏸</button>
-    <button data-speed="normal" title="Normal speed">▶</button>
-    <button data-speed="fast"   title="Fast (3×)">▶▶</button>
-    <button data-speed="faster" title="Fastest (5×)">▶▶▶</button>
+    <button data-speed="paused" title="⏸ Pause">⏸</button>
+    <button data-speed="normal" title="▶ Normal speed">▶</button>
+    <button data-speed="fast"   title="▶▶ Fast (3×)">▶▶</button>
+    <button data-speed="faster" title="▶▶▶ Fastest (5×)">▶▶▶</button>
   `;
-  toolbar.appendChild(group);
+
+  // Insert just before the RCI bars so it sits at the right end of the bar.
+  const rciEl = bar.querySelector('.rci-bars');
+  if (rciEl) bar.insertBefore(group, rciEl);
+  else bar.appendChild(group);
 
   group.querySelectorAll('[data-speed]').forEach(btn => {
     btn.addEventListener('click', () => city.setGameSpeed(btn.dataset.speed));

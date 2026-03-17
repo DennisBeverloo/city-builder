@@ -501,8 +501,110 @@ html, body {
   margin-top: 8px;
 }
 
-/* ── Speed controls ── */
-#toolbar button.speed-active {
+/* ── Speed controls (bottom bar) ── */
+.speed-group {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  margin: 0 6px;
+}
+
+.speed-group button {
+  padding: 2px 5px;
+  border: 1px solid #2a2a45;
+  background: transparent;
+  color: #666;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.speed-group button:hover {
+  background: #1e1e3a;
+  border-color: #444;
+  color: #ccc;
+}
+.speed-group button.speed-active {
+  background: #2a2a5a;
+  border-color: #6060cc;
+  color: #aac8ff;
+}
+
+/* ── Toolbar flyout menus ── */
+.toolbar-flyout {
+  position: fixed;
+  background: #12122a;
+  border: 1px solid #2a2a45;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 10px;
+  z-index: 150;
+  max-width: 400px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
+}
+.toolbar-flyout.hidden { display: none; }
+
+.flyout-label {
+  width: 100%;
+  font-size: 10px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 2px;
+}
+
+/* Flyout buttons mirror #toolbar button styles (they live outside #toolbar). */
+.toolbar-flyout button {
+  padding: 4px 8px;
+  border: 1px solid #333;
+  background: #1e1e3a;
+  color: #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.toolbar-flyout button:hover:not(.locked) {
+  background: #2a2a50;
+  border-color: #555;
+  color: #fff;
+}
+.toolbar-flyout button.active {
+  background: #3a3a70;
+  border-color: #6060cc;
+  color: #fff;
+}
+.toolbar-flyout button.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Toggle button that replaces a collapsed toolbar group */
+.toolbar-menu-toggle {
+  padding: 4px 10px;
+  border: 1px solid #333;
+  background: #1e1e3a;
+  color: #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.toolbar-menu-toggle:hover {
+  background: #2a2a50;
+  border-color: #555;
+  color: #fff;
+}
+/* Toggle is highlighted when a tool from its group is active */
+.toolbar-menu-toggle.menu-group-active {
   background: #3a3a70;
   border-color: #6060cc;
   color: #fff;
