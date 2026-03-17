@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createBuildingMesh, createBridgeMesh, BUILDINGS } from './buildings.js';
 
 const GRID_SIZE    = 40;
 const GRID_CENTER  = new THREE.Vector3(GRID_SIZE / 2, 0, GRID_SIZE / 2);
@@ -115,6 +116,74 @@ export function getScene()    { return _scene;    }
 export function getCamera()   { return _camera;   }
 export function getRenderer() { return _renderer; }
 export function getControls() { return _controls; }
+
+// ── Post-load scene rebuild ───────────────────────────────────────────────────
+
+const _TILE_H = 0.06;
+
+/** Mirror of grid.js _tileColor — derives floor hex from tile state. */
+function _deriveFloorColor(tile) {
+  if (tile.isBridge) return 0x1565c0;
+  switch (tile.type) {
+    case 'road':    return 0x37474f;
+    case 'terrain':
+      return { river: 0x1565c0, forest: 0x2e7d32, field: 0xf9a825 }[tile.terrainType] ?? 0x5a8a3c;
+    case 'zone':
+    case 'service':
+    case 'infra':
+      if (tile.zoneType) return { R: 0x81c784, C: 0x64b5f6, I: 0xb0bec5 }[tile.zoneType] ?? 0x5a8a3c;
+      if (tile.building) return tile.building.def.color;
+      return 0x5a8a3c;
+    default:
+      return 0x5a8a3c;
+  }
+}
+
+/**
+ * Rebuild Three.js building meshes after a game load or reset.
+ * Caller must remove old meshes from the scene BEFORE calling this.
+ * Updates every floor tile's color and creates building meshes for tiles
+ * where tile.building exists but tile.building.mesh is null.
+ * Also repopulates grid._bMeshes so demolish / replace work correctly.
+ * @param {import('./grid.js').Grid} grid
+ */
+export function rebuildSceneFromGrid(grid) {
+  // Clear stale building mesh map — old meshes were already removed by caller.
+  if (grid._bMeshes) grid._bMeshes.clear();
+
+  for (const tile of grid.getAllTiles()) {
+    // Restore floor color (direct mutation avoids importing Grid internals).
+    if (tile.mesh) {
+      tile.mesh.material = new THREE.MeshLambertMaterial({ color: _deriveFloorColor(tile) });
+    }
+
+    if (!tile.building || tile.building.mesh !== null) continue;
+
+    const { x, z } = tile;
+    const { id, def } = tile.building;
+
+    let mesh;
+    if (tile.isBridge) {
+      mesh = createBridgeMesh();
+      mesh.position.set(x + 0.5, _TILE_H / 2, z + 0.5);
+    } else {
+      mesh = createBuildingMesh(id);
+      mesh.position.set(x + 0.5, _TILE_H / 2 + def.height / 2, z + 0.5);
+    }
+    mesh.userData.buildingId = id;
+    mesh.userData.tileX      = x;
+    mesh.userData.tileZ      = z;
+    _scene.add(mesh);
+    tile.building.mesh = mesh;
+    if (grid._bMeshes) grid._bMeshes.set(`${x}_${z}`, mesh);
+  }
+
+  // Apply labor state colors immediately so loaded state is visually correct.
+  const allBuildings = grid.getAllTiles()
+    .filter(t => t.building?.mesh)
+    .map(t => t.building);
+  applyLaborStateColors(allBuildings);
+}
 
 /**
  * Update mesh colours for C and I buildings based on their laborState.

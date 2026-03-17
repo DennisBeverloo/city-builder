@@ -5,13 +5,14 @@
  * drag-to-build for roads (straight lines) and zones (rectangles).
  */
 import * as THREE from 'three';
-import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors } from './scene.js';
+import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid } from './scene.js';
 import { Grid }    from './grid.js';
 import { City }    from './city.js';
 import { generateTerrain, clearForestAt } from './terrain.js';
 import {
   initToolbar, initHUD, initNotifications, initDebugPanel,
   getActiveTool, resetTool, showTileInfo, showNotification,
+  initSpeedControls, initPauseMenu,
 } from './ui.js';
 import { BUILDINGS } from './buildings.js';
 import { initModalTriggers } from './modals.js';
@@ -35,8 +36,33 @@ initHUD(city);
 initNotifications(city);
 initModalTriggers(city);
 initDebugPanel(city);
+initSpeedControls(city);
+initPauseMenu(city);
 
 city.on('laborStateChanged', applyLaborStateColors);
+
+// ── Scene rebuild after load / reset ─────────────────────────────────────────
+
+city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
+  // Remove stale building meshes from scene.
+  for (const mesh of oldMeshes) scene.remove(mesh);
+  // Clear forest tree meshes.
+  for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
+  // Rebuild floor colors and building meshes from grid state.
+  rebuildSceneFromGrid(grid);
+});
+
+city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
+  // Remove stale building meshes from scene.
+  for (const mesh of oldMeshes) scene.remove(mesh);
+  // Clear all forest tree meshes.
+  for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
+  // Regenerate fresh terrain (rivers, forests, trees).
+  generateTerrain(grid, scene);
+  grid.setDecorationRemover((x, z) => clearForestAt(scene, x, z));
+  // Update floor colors.
+  rebuildSceneFromGrid(grid);
+});
 
 city.emit('stateChanged', city.getState());
 city.emit('dayTick',      city.getState());

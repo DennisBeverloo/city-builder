@@ -4,6 +4,7 @@
  * Knows nothing about Three.js internals.
  */
 import { getBuildingDef } from './buildings.js';
+import { SPEED_PRESETS } from './city.js';
 
 // ── Tool state ───────────────────────────────────────────────────────────────
 
@@ -534,4 +535,169 @@ export function initNotifications(city) {
   city.on('levelUp', ({ level, population }) => {
     showNotification(`🏙️ City Level ${level}! Population: ${_fmt(population)}`, 'levelup', 4000);
   });
+}
+
+// ── Speed controls ────────────────────────────────────────────────────────────
+
+/**
+ * Inject ⏸/▶/▶▶/▶▶▶ speed buttons into the toolbar and keep them in sync.
+ * @param {import('./city.js').City} city
+ */
+export function initSpeedControls(city) {
+  const toolbar = document.getElementById('toolbar');
+  if (!toolbar) return;
+
+  const group = document.createElement('div');
+  group.className = 'toolbar-group';
+  group.id = 'speed-group';
+  group.innerHTML = `
+    <span class="toolbar-label">Speed</span>
+    <button data-speed="paused" title="Pause">⏸</button>
+    <button data-speed="normal" title="Normal speed">▶</button>
+    <button data-speed="fast"   title="Fast (3×)">▶▶</button>
+    <button data-speed="faster" title="Fastest (5×)">▶▶▶</button>
+  `;
+  toolbar.appendChild(group);
+
+  group.querySelectorAll('[data-speed]').forEach(btn => {
+    btn.addEventListener('click', () => city.setGameSpeed(btn.dataset.speed));
+  });
+
+  const syncHighlight = (state) => {
+    group.querySelectorAll('[data-speed]').forEach(btn => {
+      const active = state.isPaused
+        ? btn.dataset.speed === 'paused'
+        : btn.dataset.speed === state.gameSpeed;
+      btn.classList.toggle('speed-active', active);
+    });
+  };
+
+  city.on('speedChanged', syncHighlight);
+  syncHighlight(city.getState());
+}
+
+// ── Pause menu ────────────────────────────────────────────────────────────────
+
+let _wasAlreadyPaused = false;
+
+/**
+ * Wire the pause overlay: Esc to toggle, resume/new-game/save/load actions.
+ * @param {import('./city.js').City} city
+ */
+export function initPauseMenu(city) {
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'Escape') return;
+    // If modal is open, close it instead.
+    const modal = document.getElementById('modal-overlay');
+    if (modal && !modal.classList.contains('hidden')) {
+      modal.classList.add('hidden');
+      return;
+    }
+    const overlay = document.getElementById('pause-overlay');
+    if (!overlay) return;
+    if (overlay.classList.contains('hidden')) {
+      _showPauseMenu(city);
+    } else {
+      _hidePauseMenu(city);
+    }
+  });
+
+  document.getElementById('btn-resume')?.addEventListener('click', () => _hidePauseMenu(city));
+
+  document.getElementById('btn-save-expand')?.addEventListener('click', () =>
+    _toggleSection('save-slots', 'load-slots', city, 'save'));
+
+  document.getElementById('btn-load-expand')?.addEventListener('click', () =>
+    _toggleSection('load-slots', 'save-slots', city, 'load'));
+
+  document.getElementById('btn-new-game')?.addEventListener('click', () => {
+    document.getElementById('new-game-confirm')?.classList.remove('hidden');
+  });
+  document.getElementById('btn-new-game-cancel')?.addEventListener('click', () => {
+    document.getElementById('new-game-confirm')?.classList.add('hidden');
+  });
+  document.getElementById('btn-new-game-confirm')?.addEventListener('click', () => {
+    city.resetGame();
+    _forceHidePauseMenu();
+  });
+
+  // Click on backdrop closes menu.
+  document.getElementById('pause-overlay')?.addEventListener('click', e => {
+    if (e.target.id === 'pause-overlay') _hidePauseMenu(city);
+  });
+}
+
+function _showPauseMenu(city) {
+  _wasAlreadyPaused = city.getState().isPaused;
+  if (!_wasAlreadyPaused) city.pauseGame();
+  document.getElementById('pause-overlay')?.classList.remove('hidden');
+  document.getElementById('save-slots')?.classList.add('hidden');
+  document.getElementById('load-slots')?.classList.add('hidden');
+  document.getElementById('new-game-confirm')?.classList.add('hidden');
+}
+
+function _hidePauseMenu(city) {
+  _forceHidePauseMenu();
+  if (!_wasAlreadyPaused) city.resumeGame();
+}
+
+function _forceHidePauseMenu() {
+  document.getElementById('pause-overlay')?.classList.add('hidden');
+}
+
+function _toggleSection(showId, hideId, city, mode) {
+  const show = document.getElementById(showId);
+  const hide = document.getElementById(hideId);
+  if (!show) return;
+  hide?.classList.add('hidden');
+  if (show.classList.contains('hidden')) {
+    show.classList.remove('hidden');
+    _renderSlots(show, city, mode);
+  } else {
+    show.classList.add('hidden');
+  }
+}
+
+function _renderSlots(container, city, mode) {
+  container.innerHTML = '';
+  for (let slot = 1; slot <= 3; slot++) {
+    const info = city.getSaveInfo(slot);
+    const row  = document.createElement('div');
+    row.className = 'slot-row';
+
+    const label = document.createElement('div');
+    label.className = 'slot-label';
+    label.textContent = `Slot ${slot}`;
+
+    const desc = document.createElement('div');
+    desc.className = 'slot-desc';
+    if (info.exists) {
+      desc.textContent = `Pop: ${info.population ?? '?'} | Lvl ${info.cityLevel ?? '?'} | ${info.date ?? ''}`;
+    } else {
+      desc.textContent = 'Empty';
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'slot-action-btn';
+
+    if (mode === 'save') {
+      btn.textContent = info.exists ? 'Overwrite' : 'Save';
+      btn.addEventListener('click', () => {
+        const result = city.saveGame(slot);
+        if (result.success) _renderSlots(container, city, mode);
+      });
+    } else {
+      btn.textContent = 'Load';
+      btn.disabled = !info.exists;
+      if (info.exists) {
+        btn.addEventListener('click', () => {
+          city.loadGame(slot);
+          _forceHidePauseMenu();
+        });
+      }
+    }
+
+    row.append(label, desc, btn);
+    container.appendChild(row);
+  }
 }

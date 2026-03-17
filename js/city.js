@@ -1,11 +1,11 @@
 /**
  * @module city
- * City state, simulation loop, RCI demand logic, and auto-spawn.
+ * City state, simulation loop, RCI demand logic, save/load, and speed control.
  * No Three.js. Communicates outward via EventEmitter callbacks.
  *
  * Simulation cadence:
  *   Every 5 game-days  → _updateSimulation (pop/power/water/happiness/RCI/auto-spawn)
- *   Every 30 game-days → _advanceMonth (taxes + upkeep only)
+ *   Every 30 game-days → _advanceMonth (taxes + upkeep + autosave)
  */
 import { BUILDINGS } from './buildings.js';
 import { processMonth } from './economy.js';
@@ -22,40 +22,79 @@ export class EventEmitter {
   emit(event, data) { (this._listeners[event] ?? []).forEach(fn => fn(data)); }
 }
 
+// ── Speed presets ────────────────────────────────────────────────────────────
+
+/** Milliseconds per game day for each speed preset (0 = paused). */
+export const SPEED_PRESETS = {
+  paused: 0,
+  normal: 1000,   // 1 real second per game day  (~30 s/month)
+  fast:    333,   // 3× speed                    (~10 s/month)
+  faster:  200,   // 5× speed                    (~6 s/month)
+};
+
 // CAPACITY PLANNING REFERENCE
 // Target: self-sustaining city at 500 residents
 // ~84 R buildings:  84 × power 1  =  84 kW,  84 × water 1  =  84 units
 // ~105 C buildings: 105 × power 2 = 210 kW, 105 × water 1 = 105 units
 // ~21 I buildings:   21 × power 5 = 105 kW,  21 × water 3 =  63 units
 // Total at 500 pop: ~399 kW, ~252 water units
-//
-// Diesel generator: 150 kW → covers ~188 residents (R+C+I mix)
-// Coal plant:       600 kW → covers ~750 residents (R+C+I mix)
-// Small pump:        80 units → covers ~160 residents (R+C+I mix)
-// Water station:    320 units → covers ~640 residents (R+C+I mix)
-//
-// Recommended starter build: Diesel Gen + Small Pump = €5500 + €1100/mo upkeep
-// Remaining budget after starter infra: €44500 for zoning and roads
 
 // ── Simulation config ────────────────────────────────────────────────────────
 
 /** Exported so economy.js and grid.js can read values via parameter passing. */
 export const SIMULATION_CONFIG = {
-  residentAdultRatio:        0.60,  // fraction of residents who are workers AND shoppers
-  cBuildingWorkers:          3,     // jobs per commercial building
-  iBuildingWorkers:          10,    // jobs per industrial building
-  rBuildingCapacity:         6,     // max residents per residential building
-  cSupplyRatio:              5,     // max C buildings supplied by 1 I building
-  cUndersupplyEfficiency:    0.50,  // C tax multiplier when I supply is absent
-  fillGrowthRatePerMonth:    0.15,  // fraction of remaining capacity filled per month
-  industryPollutionRadius:   6,     // Manhattan-distance radius for I pollution
-  industryPollutionStrength: 40,    // base pollution at source tile (0–100)
+  residentAdultRatio:        0.60,
+  cBuildingWorkers:          3,
+  iBuildingWorkers:          10,
+  rBuildingCapacity:         6,
+  cSupplyRatio:              5,
+  cUndersupplyEfficiency:    0.50,
+  fillGrowthRatePerMonth:    0.15,
+  industryPollutionRadius:   6,
+  industryPollutionStrength: 40,
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const LEVEL_THRESHOLDS = [0, 500, 1500, 3000, 6000, 12000, 25000, 50000, 100_000, 250_000];
-const SIM_TICK_DAYS    = 5;   // how often the simulation (non-economy) updates
+const SIM_TICK_DAYS    = 5;
+const SAVE_VERSION     = 1;
+
+// ── Initial state factory ─────────────────────────────────────────────────────
+
+function _makeInitialState() {
+  return {
+    money:               50_000,
+    population:          0,
+    happiness:           50,
+    cityLevel:           1,
+    date:                { day: 1, month: 1, year: 1 },
+    totalPowerNeeded:    0,
+    totalPowerAvailable: 0,
+    totalWaterNeeded:    0,
+    totalWaterAvailable: 0,
+    rciDemand:           { R: 50, C: 30, I: 20 },
+    lastMonthNet:        0,
+    totalCommercialJobs:       0,
+    totalIndustrialJobs:       0,
+    totalCommercialBuildings:  0,
+    totalIndustrialBuildings:  0,
+    totalResidentialTiles:     0,
+    emptyResidentialZoneTiles: 0,
+    avgRFill:                  0,
+    laborEfficiency:           1.0,
+    infraEfficiency:           1.0,
+    rciResult:                 null,
+    workerShortageRatio:       1.0,
+    laborDemandMultiplier:     1.0,
+    struggling:                0,
+    abandoned:                 0,
+    // Speed / pause
+    gameSpeed:    'normal',
+    isPaused:     false,
+    prePauseSpeed: 'normal',
+  };
+}
 
 // ── City ─────────────────────────────────────────────────────────────────────
 
@@ -64,41 +103,11 @@ export class City extends EventEmitter {
   constructor(grid) {
     super();
     this._grid = grid;
-
-    this._state = {
-      money:               50_000,
-      population:          0,
-      happiness:           50,
-      cityLevel:           1,
-      date:                { day: 1, month: 1, year: 1 },
-      totalPowerNeeded:    0,
-      totalPowerAvailable: 0,
-      totalWaterNeeded:    0,
-      totalWaterAvailable: 0,
-      rciDemand:           { R: 50, C: 30, I: 20 },
-      lastMonthNet:        0,
-      totalCommercialJobs:       0,
-      totalIndustrialJobs:       0,
-      totalCommercialBuildings:  0,
-      totalIndustrialBuildings:  0,
-      totalResidentialTiles:     0,
-      emptyResidentialZoneTiles: 0,
-      avgRFill:                  0,
-      laborEfficiency:           1.0,
-      infraEfficiency:           1.0,
-      rciResult:                 null,
-      workerShortageRatio:       1.0,
-      laborDemandMultiplier:     1.0,
-      struggling:                0,
-      abandoned:                 0,
-    };
-
+    this._state = _makeInitialState();
     this._rciBreakdown = null;
     this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
-
     this._dayTimer = 0;
-    this._dayMs    = 1000; // 1 real second = 1 game day
-    this._paused   = false;
+    this._dayMs    = SPEED_PRESETS.normal;
   }
 
   // ── Public getters ───────────────────────────────────────────────
@@ -106,14 +115,50 @@ export class City extends EventEmitter {
   getState()        { return { ...this._state }; }
   getDebugStats()   { return this._grid.getStats(); }
   getRCIBreakdown() { return this._rciBreakdown; }
-  get paused()      { return this._paused; }
-  set paused(v)     { this._paused = v; }
+
+  // ── Game speed control ───────────────────────────────────────────
+
+  /**
+   * Set the simulation speed.
+   * @param {'paused'|'normal'|'fast'|'faster'} preset
+   */
+  setGameSpeed(preset) {
+    if (!(preset in SPEED_PRESETS)) return;
+    this._state.gameSpeed = preset;
+    if (preset === 'paused') {
+      this._state.isPaused = true;
+    } else {
+      this._state.isPaused = false;
+      this._dayMs    = SPEED_PRESETS[preset];
+      this._dayTimer = 0;  // avoid time-debt jump on unpause
+    }
+    this.emit('speedChanged', this.getState());
+  }
+
+  /** Pause and remember current speed for resumeGame(). */
+  pauseGame() {
+    if (!this._state.isPaused) {
+      this._state.prePauseSpeed = this._state.gameSpeed;
+    }
+    this.setGameSpeed('paused');
+  }
+
+  /** Resume at the speed that was active before pauseGame(). */
+  resumeGame() {
+    this.setGameSpeed(this._state.prePauseSpeed ?? 'normal');
+  }
+
+  /** Toggle between paused and running. */
+  togglePause() {
+    if (this._state.isPaused) this.resumeGame();
+    else this.pauseGame();
+  }
 
   // ── Main loop ────────────────────────────────────────────────────
 
-  /** Call from RAF loop. @param {number} dt milliseconds */
+  /** @param {number} dt milliseconds */
   tick(dt) {
-    if (this._paused) return;
+    if (this._state.isPaused) return;
     this._dayTimer += dt;
     if (this._dayTimer >= this._dayMs) {
       this._dayTimer -= this._dayMs;
@@ -124,17 +169,13 @@ export class City extends EventEmitter {
   _advanceDay() {
     const d = this._state.date;
     d.day++;
-
     const isMonthEnd = d.day > 30;
 
     if (isMonthEnd) {
-      // Update fill percentages and tile maps BEFORE the sim tick so that
-      // the demand calculation and happiness values see the current month's data.
       this._updateFillPercentages();
       this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
     }
 
-    // Simulation tick every SIM_TICK_DAYS, and also at month-end
     if (d.day % SIM_TICK_DAYS === 0 || isMonthEnd) {
       const stats = this._grid.getStats();
       const { power, water } = this._calcPowerWater(stats.allBuildings);
@@ -149,28 +190,20 @@ export class City extends EventEmitter {
     }
   }
 
-  /**
-   * Full simulation update: pop/power/water/happiness/RCI/auto-spawn/level-up.
-   * Runs every SIM_TICK_DAYS game days. Does NOT touch the budget.
-   */
   _updateSimulation(stats, power, water) {
     this._state.totalPowerNeeded    = power.needed;
     this._state.totalPowerAvailable = power.available;
     this._state.totalWaterNeeded    = water.needed;
     this._state.totalWaterAvailable = water.available;
 
-    // Infrastructure efficiency: ratio of supply to demand, clamped to [0.2, 1.0]
     const powerRatio = power.available / Math.max(power.needed, 1);
     const waterRatio = water.available / Math.max(water.needed, 1);
     this._state.infraEfficiency = Math.max(0.2, Math.min(1.0, Math.min(powerRatio, waterRatio)));
 
-    this._state.population          = stats.population;  // fill-adjusted
-    this._state.happiness           = this._calcHappiness(power, water);
+    this._state.population = stats.population;
+    this._state.happiness  = this._calcHappiness(power, water);
 
-    // Populate RCI model fields (used by demand calc, debug panel, modals)
     const CFG = SIMULATION_CONFIG;
-
-    // Count only non-abandoned C/I buildings for job totals
     let activeC = 0, activeI = 0;
     for (const b of stats.allBuildings) {
       if (b.def?.zoneType === 'C' && b.laborState !== 'abandoned') activeC++;
@@ -196,26 +229,19 @@ export class City extends EventEmitter {
     this.emit('stateChanged', this.getState());
   }
 
-  /**
-   * Economy-only month processing: taxes in, upkeep out.
-   * Does NOT touch RCI / population / stats.
-   */
   _advanceMonth() {
-    // Update per-building labor states FIRST (uses freshly computed laborEfficiency)
     this._updateLaborStates();
 
     const stats  = this._grid.getStats();
     const result = processMonth(stats.allBuildings, SIMULATION_CONFIG);
 
-    // Subtract abandoned-building tax that processMonth wrongly counted
-    // (processMonth has no knowledge of laborState)
-    const CFG    = SIMULATION_CONFIG;
-    const allB   = stats.allBuildings;
-    const totC   = allB.filter(b => b.def?.zoneType === 'C').length;
-    const totI   = allB.filter(b => b.def?.zoneType === 'I').length;
-    const supC   = Math.min(totC, totI * CFG.cSupplyRatio);
-    const supR   = totC > 0 ? supC / totC : 1.0;
-    const cTM    = CFG.cUndersupplyEfficiency + (1 - CFG.cUndersupplyEfficiency) * supR;
+    const CFG  = SIMULATION_CONFIG;
+    const allB = stats.allBuildings;
+    const totC = allB.filter(b => b.def?.zoneType === 'C').length;
+    const totI = allB.filter(b => b.def?.zoneType === 'I').length;
+    const supC = Math.min(totC, totI * CFG.cSupplyRatio);
+    const supR = totC > 0 ? supC / totC : 1.0;
+    const cTM  = CFG.cUndersupplyEfficiency + (1 - CFG.cUndersupplyEfficiency) * supR;
     for (const b of allB) {
       if (b.laborState !== 'abandoned') continue;
       if (b.def?.zoneType === 'C') result.breakdown.commercialTax -= 50 * cTM;
@@ -224,12 +250,10 @@ export class City extends EventEmitter {
     result.breakdown.commercialTax = Math.max(0, result.breakdown.commercialTax);
     result.breakdown.industrialTax = Math.max(0, result.breakdown.industrialTax);
 
-    // Apply labor efficiency to C and I tax yield
     const le = this._state.laborEfficiency ?? 1.0;
     result.breakdown.commercialTax *= le;
     result.breakdown.industrialTax *= le;
 
-    // Apply infrastructure efficiency to all zone tax income (power/water shortage penalty)
     const ie = this._state.infraEfficiency ?? 1.0;
     result.breakdown.residentialTax *= ie;
     result.breakdown.commercialTax  *= ie;
@@ -243,20 +267,238 @@ export class City extends EventEmitter {
     this._state.money        += result.net;
     this._state.lastMonthNet  = result.net;
 
-    // Allow bootstrap spawns again next month
     this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
 
     const d = this._state.date;
     d.month++;
     if (d.month > 12) { d.month = 1; d.year++; }
 
+    // Autosave (silently) after each month
+    const _as = this.saveGame('autosave');
+    if (!_as.success) console.warn('Autosave failed:', _as.error);
+
     this.emit('monthProcessed', { ...this.getState(), monthResult: result });
     this.emit('dayTick', this.getState());
   }
 
+  // ── Save / Load ───────────────────────────────────────────────────
+
+  _saveKey(slot) {
+    return slot === 'autosave' ? 'citybuilder_autosave' : `citybuilder_save_${slot}`;
+  }
+
+  /**
+   * Persist the current city to a localStorage slot.
+   * @param {1|2|3|'autosave'} slot
+   * @returns {{ success: boolean, savedAt?: string, error?: string }}
+   */
+  saveGame(slot) {
+    const key = this._saveKey(slot);
+    try {
+      const gridData = this._grid.getAllTiles().map(tile => ({
+        x:           tile.x,
+        z:           tile.z,
+        type:        tile.type,
+        zoneType:    tile.zoneType,
+        terrainType: tile.terrainType,
+        isBridge:    tile.isBridge,
+        connected:   tile.connected,
+        desirability: tile.desirability,
+        pollution:   tile.pollution,
+        happiness:   tile.happiness,
+        landValue:   tile.landValue,
+        serviceCoverage: { ...tile.serviceCoverage },
+        building: tile.building ? {
+          type:            tile.building.id,
+          fillPercentage:  tile.building.fillPercentage,
+          residents:       tile.building.residents,
+          jobs:            tile.building.jobs,
+          level:           tile.building.level,
+          laborState:      tile.building.laborState,
+          laborStateTurns: tile.building.laborStateTurns,
+          recovering:      tile.building.recovering,
+          baseColor:       tile.building.baseColor,
+        } : null,
+      }));
+
+      const savedAt = new Date().toISOString();
+      const save = {
+        version:  SAVE_VERSION,
+        savedAt,
+        cityName: 'My City',
+        snapshot: { ...this._state },
+        grid:     gridData,
+      };
+
+      localStorage.setItem(key, JSON.stringify(save));
+      return { success: true, savedAt };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Load a previously saved game. Emits 'gameLoaded' for scene rebuild.
+   * @param {1|2|3|'autosave'} slot
+   * @returns {{ success: boolean, error?: string }}
+   */
+  loadGame(slot) {
+    const key = this._saveKey(slot);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { success: false, error: 'No save found' };
+
+      const save = JSON.parse(raw);
+      if (!save.version || save.version !== SAVE_VERSION)
+        return { success: false, error: 'Incompatible save format' };
+
+      // Collect current forest tiles (for scene to clear old tree meshes)
+      const oldForestTiles = this._grid.getAllTiles()
+        .filter(t => t.terrainType === 'forest')
+        .map(t => ({ x: t.x, z: t.z }));
+
+      // Collect old building meshes before clearing tile.building
+      const oldMeshes = this._grid.getAllTiles()
+        .filter(t => t.building?.mesh)
+        .map(t => t.building.mesh);
+
+      // Restore city state (unpause on load)
+      const snap = save.snapshot ?? {};
+      Object.assign(this._state, snap);
+      this._state.isPaused = false;
+      const resumeSpeed = (snap.gameSpeed && snap.gameSpeed !== 'paused') ? snap.gameSpeed : 'normal';
+      this._state.gameSpeed = resumeSpeed;
+      this._dayMs    = SPEED_PRESETS[resumeSpeed] ?? SPEED_PRESETS.normal;
+      this._dayTimer = 0;
+      this._rciBreakdown = snap.rciResult?.breakdown ?? null;
+      this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
+
+      // Restore grid tiles (direct mutation — tile objects are mutable references)
+      for (const saved of save.grid) {
+        const tile = this._grid.getTile(saved.x, saved.z);
+        if (!tile) continue;
+
+        tile.type        = saved.type;
+        tile.zoneType    = saved.zoneType    ?? null;
+        tile.terrainType = saved.terrainType ?? null;
+        tile.isBridge    = saved.isBridge    ?? false;
+        tile.connected   = saved.connected   ?? false;
+        tile.desirability    = saved.desirability ?? 0;
+        tile.pollution       = saved.pollution    ?? 0;
+        tile.happiness       = saved.happiness    ?? 50;
+        tile.landValue       = saved.landValue    ?? 0;
+        tile.serviceCoverage = saved.serviceCoverage
+          ? { ...saved.serviceCoverage }
+          : { police: 0, fire: 0, hospital: 0, education: 0, parks: 0 };
+
+        if (saved.building) {
+          const def = BUILDINGS[saved.building.type];
+          if (def) {
+            tile.building = {
+              id:              saved.building.type,
+              def,
+              mesh:            null,   // recreated by rebuildSceneFromGrid
+              fillPercentage:  saved.building.fillPercentage ?? (def.zoneType ? 0.1 : 1.0),
+              residents:       saved.building.residents  ?? 0,
+              jobs:            saved.building.jobs       ?? (def.provides?.jobs || 0),
+              level:           saved.building.level      ?? 1,
+              tileX:           saved.x,
+              tileZ:           saved.z,
+              laborState:      saved.building.laborState      ?? 'ok',
+              laborStateTurns: saved.building.laborStateTurns ?? 0,
+              recovering:      saved.building.recovering      ?? false,
+              baseColor:       saved.building.baseColor       ?? def.color,
+            };
+          } else {
+            tile.building = null;   // unknown building type — treat as empty
+          }
+        } else {
+          tile.building = null;
+        }
+      }
+
+      // Recalculate derived grid data
+      this._grid.calculateRoadAccess();
+      this._grid.recalculateServiceEffects();
+
+      // Signal main.js to rebuild the Three.js scene
+      this.emit('gameLoaded', { oldForestTiles, oldMeshes });
+      this.emit('stateChanged', this.getState());
+      this.emit('dayTick',      this.getState());
+
+      return { success: true };
+    } catch (e) {
+      console.error('loadGame error:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Return lightweight save metadata for slot-picker UI.
+   * @param {1|2|3|'autosave'} slot
+   * @returns {{ exists, savedAt, population, cityLevel, date }}
+   */
+  getSaveInfo(slot) {
+    const key = this._saveKey(slot);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { exists: false, savedAt: null, population: null, cityLevel: null, date: null };
+      const save = JSON.parse(raw);
+      const s = save.snapshot ?? {};
+      const d = s.date;
+      return {
+        exists:     true,
+        savedAt:    save.savedAt ?? null,
+        population: s.population  ?? null,
+        cityLevel:  s.cityLevel   ?? null,
+        date:       d ? `Y${d.year} M${d.month} D${d.day}` : null,
+      };
+    } catch {
+      return { exists: false, savedAt: null, population: null, cityLevel: null, date: null };
+    }
+  }
+
+  /**
+   * Reset to a fresh new game. Emits 'gameReset' for scene rebuild and terrain regeneration.
+   */
+  resetGame() {
+    // Collect current forest tiles and building meshes before clearing
+    const oldForestTiles = this._grid.getAllTiles()
+      .filter(t => t.terrainType === 'forest')
+      .map(t => ({ x: t.x, z: t.z }));
+
+    const oldMeshes = this._grid.getAllTiles()
+      .filter(t => t.building?.mesh)
+      .map(t => t.building.mesh);
+
+    // Reset city state
+    this._state = _makeInitialState();
+    this._rciBreakdown = null;
+    this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
+    this._dayTimer = 0;
+    this._dayMs    = SPEED_PRESETS.normal;
+
+    // Reset all tile data (keep tile.mesh — the Three.js floor plane)
+    for (const tile of this._grid.getAllTiles()) {
+      tile.type        = 'empty';
+      tile.zoneType    = null;
+      tile.terrainType = null;
+      tile.isBridge    = false;
+      tile.building    = null;
+      tile.connected   = false;
+      tile.happiness        = 50;
+      tile.desirability     = 0;
+      tile.pollution        = 0;
+      tile.landValue        = 0;
+      tile.serviceCoverage  = { police: 0, fire: 0, hospital: 0, education: 0, parks: 0 };
+    }
+
+    this.emit('gameReset', { oldForestTiles, oldMeshes });
+    this.emit('stateChanged', this.getState());
+    this.emit('dayTick',      this.getState());
+  }
+
   // ── Lightweight stats refresh ────────────────────────────────────
-  // Called immediately after any player placement so the HUD reacts
-  // without waiting for the next SIM_TICK.
 
   _refreshResourceStats() {
     const stats = this._grid.getStats();
@@ -273,16 +515,6 @@ export class City extends EventEmitter {
 
   // ── Power / water summation ──────────────────────────────────────
 
-  /**
-   * Compute fill-adjusted power and water totals across all placed buildings.
-   * Supply (provides.*) is always counted at 100%.
-   * Demand (requires.*) is scaled by fillPercentage for zone buildings (R/C/I);
-   * infra and service buildings always consume at their rated value.
-   * All four output values are rounded to whole integers.
-   *
-   * @param {object[]} allBuildings  Building instance array from grid.getStats()
-   * @returns {{ power: {available,needed}, water: {available,needed} }}
-   */
   _calcPowerWater(allBuildings) {
     let powerAvail = 0, powerNeeded = 0;
     let waterAvail = 0, waterNeeded = 0;
@@ -291,9 +523,7 @@ export class City extends EventEmitter {
       if (!def) continue;
       powerAvail += def.provides?.power_kw    || 0;
       waterAvail += def.provides?.water_units || 0;
-      // Abandoned zone buildings are offline — no consumption
       if (b.laborState === 'abandoned') continue;
-      // Zone buildings scale their consumption with fill; others use full rate
       const fill = def.zoneType ? (b.fillPercentage ?? 1.0) : 1.0;
       powerNeeded += (def.requires?.power || 0) * fill;
       waterNeeded += (def.requires?.water || 0) * fill;
@@ -306,16 +536,11 @@ export class City extends EventEmitter {
 
   // ── Fill percentages ─────────────────────────────────────────────
 
-  /**
-   * Grow each zone building's fillPercentage toward 1.0 by fillGrowthRatePerMonth.
-   * Updates b.residents for R buildings so getStats() reflects the new fill.
-   * Called once per game month before the sim tick.
-   */
   _updateFillPercentages() {
     const { fillGrowthRatePerMonth, rBuildingCapacity } = SIMULATION_CONFIG;
     for (const t of this._grid.getAllTiles()) {
       const b = t.building;
-      if (!b || !b.def.zoneType) continue;   // only zone buildings
+      if (!b || !b.def.zoneType) continue;
       const prev = b.fillPercentage ?? 0.1;
       b.fillPercentage = Math.min(1.0, prev + fillGrowthRatePerMonth * (1.0 - prev));
       if (b.def.zoneType === 'R') {
@@ -326,13 +551,6 @@ export class City extends EventEmitter {
 
   // ── Happiness ────────────────────────────────────────────────────
 
-  /**
-   * City-wide happiness = average of tile.happiness across R tiles WITH buildings.
-   * Power/water shortages apply a city-level penalty on top.
-   * tile.happiness itself is computed by grid.runMonthlyTileCalcs / recalculateServiceEffects.
-   * @param {{ available: number, needed: number }} power
-   * @param {{ available: number, needed: number }} water
-   */
   _calcHappiness(power, water) {
     const tiles = this._grid.getAllTiles()
       .filter(t => t.type === 'zone' && t.zoneType === 'R' && t.building);
@@ -346,34 +564,11 @@ export class City extends EventEmitter {
 
   // ── RCI demand ───────────────────────────────────────────────────
 
-  /**
-   * Weighted multi-factor RCI demand model (section 5 of economic spec).
-   *
-   * Derived city totals use fillPercentage-adjusted residents:
-   *   totalResidents = sum(capacity * fill) for R buildings  (= stats.population)
-   *   totalWorkers   = totalResidents * residentAdultRatio
-   *   totalShoppers  = totalWorkers   (same pool)
-   *   totalCJobs     = count(C) * cBuildingWorkers   (job SLOTS, not fill-adjusted)
-   *   totalIJobs     = count(I) * iBuildingWorkers
-   *   suppliedC      = count(I) * cSupplyRatio
-   *
-   * Weights:  R → jobs(0.50) zones(0.30) happiness(0.20)
-   *           C → workers(0.40) customers(0.35) supply(0.25)
-   *           I → workers(0.45) market(0.55)
-   *
-   * Bootstrap floors applied after scoring (unconditional Math.max clamps):
-   *   rFloor = C>0 || I>0 ? 10 : 0
-   *   cFloor = R tiles>0 ? 10 : 0;  if I>0 && C===0 → 15
-   *   iFloor = R tiles>0 ? 10 : 0;  if C>0 && I===0 → 15
-   *
-   * @param {object} stats  result of grid.getStats()
-   * @returns {{ rDemand, cDemand, iDemand, breakdown }}
-   */
   _calculateRCIDemand(stats) {
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     const CFG   = SIMULATION_CONFIG;
 
-    const res       = stats.population;           // fill-adjusted residents
+    const res       = stats.population;
     const workers   = res * CFG.residentAdultRatio;
     const shoppers  = workers;
     const cBldg     = stats.cBuildings;
@@ -383,19 +578,15 @@ export class City extends EventEmitter {
     const totalJobs = cJobs + iJobs;
     const rTiles    = stats.rZones;
 
-    // ── Labor efficiency (full range so abandonment thresholds work) ──
     const laborEfficiency       = clamp(workers / Math.max(totalJobs, 1), 0.0, 1.0);
     const effectiveJobs         = totalJobs * laborEfficiency;
-    // ── Worker-shortage demand suppressor (Fix 2) ─────────────────
-    const workerShortageRatio   = laborEfficiency;                           // same calc, [0,1]
+    const workerShortageRatio   = laborEfficiency;
     const laborDemandMultiplier = Math.pow(workerShortageRatio, 1.5);
 
-    // ── R factors (Fix 1: jobAvail×0.80 + happiness×0.20) ─────────
     const jobAvail     = clamp(clamp(effectiveJobs / Math.max(workers, 1), 0, 2) / 2, 0, 1);
     const happinessScr = this._state.happiness / 100;
     const rRaw         = jobAvail * 0.80 + happinessScr * 0.20;
 
-    // ── C factors ─────────────────────────────────────────────────
     let workerC = clamp(workers / Math.max(cJobs * 2, 1), 0, 1);
     if (workers < cJobs * 0.5) workerC *= 0.3;
 
@@ -405,7 +596,7 @@ export class City extends EventEmitter {
     let supplyChain;
     let suppliedCBuildings = 0;
     if (cBldg === 0) {
-      supplyChain = 1.0;                          // no C yet → no penalty
+      supplyChain = 1.0;
     } else if (iBldg === 0) {
       supplyChain = 0.10;
     } else {
@@ -415,15 +606,14 @@ export class City extends EventEmitter {
 
     const cRaw = workerC * 0.40 + customerBase * 0.35 + supplyChain * 0.25;
 
-    // ── I factors (Fix 3: market_demand = 1 / supplyRatio) ────────
     let workerI = clamp(workers / Math.max(iJobs * 2, 1), 0, 1);
     if (workers < iJobs * 0.5) workerI *= 0.3;
 
     let marketDemand;
     if (iBldg === 0) {
-      marketDemand = 1.0;                         // no I yet → full demand
+      marketDemand = 1.0;
     } else if (cBldg === 0) {
-      marketDemand = 0.10;                        // no buyers → near-zero
+      marketDemand = 0.10;
     } else {
       const supplyRatio = (iBldg * CFG.cSupplyRatio) / cBldg;
       marketDemand = clamp(1.0 / supplyRatio, 0.1, 1.0);
@@ -431,16 +621,13 @@ export class City extends EventEmitter {
 
     const iRaw = workerI * 0.45 + marketDemand * 0.55;
 
-    // ── Scale to [0, 100] ─────────────────────────────────────────
     let rScore = clamp(rRaw * 100, 0, 100);
     let cScore = clamp(cRaw * 100, 0, 100);
     let iScore = clamp(iRaw * 100, 0, 100);
 
-    // ── Apply worker-shortage suppressor to C and I before floors ──
     cScore *= laborDemandMultiplier;
     iScore *= laborDemandMultiplier;
 
-    // ── Bootstrap floors ──────────────────────────────────────────
     const rFloor = (cBldg > 0 || iBldg > 0) ? 10 : 0;
     let   cFloor = rTiles > 0 ? 10 : 0;
     if (iBldg > 0 && cBldg === 0) cFloor = 15;
@@ -451,7 +638,6 @@ export class City extends EventEmitter {
     cScore = Math.max(cScore, cFloor);
     iScore = Math.max(iScore, iFloor);
 
-    // ── R demand bonus when jobs significantly exceed workers ──────
     const jobSurplusRatio = clamp(totalJobs / Math.max(workers, 1), 1, 3);
     const rDemandBonus    = (jobSurplusRatio - 1) / 2;
     rScore = clamp(rScore + rDemandBonus * 100, rFloor, 100);
@@ -460,7 +646,6 @@ export class City extends EventEmitter {
     const cDemand = Math.round(cScore);
     const iDemand = Math.round(iScore);
 
-    // ── Fix 7: Structured result with per-factor breakdown ─────────
     const result = {
       rDemand, cDemand, iDemand,
       breakdown: {
@@ -496,11 +681,6 @@ export class City extends EventEmitter {
 
   // ── Per-building labor state ─────────────────────────────────────
 
-  /**
-   * Initialise labor-state tracking properties on a newly placed C or I building.
-   * Safe to call on any building — silently ignored for R, services, infra.
-   * @param {object|null} b  building instance from tile.building
-   */
   _initCIBuilding(b) {
     if (!b) return;
     const zt = b.def?.zoneType;
@@ -511,11 +691,6 @@ export class City extends EventEmitter {
     b.baseColor       ??= b.def?.color;
   }
 
-  /**
-   * Update laborState for every C and I building once per month.
-   * Uses this._state.laborEfficiency which must be fresh (call after _updateSimulation).
-   * Emits 'laborStateChanged' with an array of affected building instances.
-   */
   _updateLaborStates() {
     const le = this._state.laborEfficiency;
     let struggling = 0, abandoned = 0;
@@ -527,7 +702,6 @@ export class City extends EventEmitter {
       const zt = b.def?.zoneType;
       if (zt !== 'C' && zt !== 'I') continue;
 
-      // Ensure properties exist on buildings placed before this feature shipped
       this._initCIBuilding(b);
 
       const prev   = b.laborState;
@@ -556,7 +730,7 @@ export class City extends EventEmitter {
             b.laborStateTurns = 0;
           }
         } else {
-          b.laborStateTurns = 0;   // in 0.25–0.80 range: stays struggling, reset counter
+          b.laborStateTurns = 0;
         }
       } else {  // 'ok'
         if (le < 0.80) {
@@ -566,7 +740,6 @@ export class City extends EventEmitter {
       }
 
       if (b.laborState !== prev || b.recovering) changed.push(b);
-
       if (b.laborState === 'struggling') struggling++;
       else if (b.laborState === 'abandoned') abandoned++;
     }
@@ -579,11 +752,6 @@ export class City extends EventEmitter {
 
   // ── Auto-spawn ───────────────────────────────────────────────────
 
-  /**
-   * Spawn buildings on connected zone tiles when demand > 20.
-   * Also fires one bootstrap spawn per zone type per month to break cold-start loops.
-   * @param {object} power @param {object} water @param {object} stats
-   */
   _autoSpawn(power, water, stats) {
     const powerOK = power.available >= power.needed;
     const waterOK = water.available >= water.needed;
@@ -591,7 +759,6 @@ export class City extends EventEmitter {
     const zoneMap = { R: 'residential_low', C: 'commercial_low', I: 'industrial_low' };
     const level   = this._state.cityLevel;
 
-    // ── Regular demand-driven spawn ───────────────────────────────
     for (const tile of this._grid.getAllTiles()) {
       if (tile.type !== 'zone' || tile.building || !tile.connected) continue;
       const demand = d[tile.zoneType] ?? 0;
@@ -599,19 +766,15 @@ export class City extends EventEmitter {
 
       const buildingId = zoneMap[tile.zoneType];
       const def        = BUILDINGS[buildingId];
-      if (!def)                                                         continue;
-      if ((def.unlockAtLevel  ?? 1) > level)                           continue;
-      if ((def.requires?.power || 0) > 0 && !powerOK)                  continue;
-      if ((def.requires?.water || 0) > 0 && !waterOK)                  continue;
+      if (!def)                                                        continue;
+      if ((def.unlockAtLevel  ?? 1) > level)                          continue;
+      if ((def.requires?.power || 0) > 0 && !powerOK)                 continue;
+      if ((def.requires?.water || 0) > 0 && !waterOK)                 continue;
 
       this._grid.placeBuilding(tile.x, tile.z, buildingId);
-      // fillPercentage (0.1) and initial residents set inside placeBuilding
-      // Cost: free — residents/businesses moving into zoned land pay nothing
       this._initCIBuilding(this._grid.getTile(tile.x, tile.z)?.building);
     }
 
-    // ── Bootstrap spawns (at most once per type per month) ────────
-    // Prevents cold-start deadlocks when demand hasn't built up yet.
     const bs = this._bootstrapSpawnedThisMonth;
 
     const tryBootstrap = (zoneType) => {
@@ -637,11 +800,8 @@ export class City extends EventEmitter {
     const iBldg  = stats.iBuildings;
     const rBldg  = stats.rBuildings;
 
-    // R tiles exist but no C yet → force one C
     if (rTiles && cBldg === 0) tryBootstrap('C');
-    // R tiles exist but no I yet → force one I
     if (rTiles && iBldg === 0) tryBootstrap('I');
-    // C or I exists but no R yet → force one R
     if ((cBldg > 0 || iBldg > 0) && rBldg === 0) tryBootstrap('R');
   }
 
@@ -659,7 +819,6 @@ export class City extends EventEmitter {
 
   // ── Player actions ───────────────────────────────────────────────
 
-  /** Paint a zone tile. Zone painting is free. */
   placeZone(x, z, zoneType) {
     const tile = this._grid.getTile(x, z);
     if (!tile) return { success: false, reason: 'Invalid tile' };
@@ -669,7 +828,6 @@ export class City extends EventEmitter {
     return { success: true };
   }
 
-  /** Place a service, infra, or single road/bridge. Deducts cost. */
   placeBuilding(x, z, buildingId) {
     const def  = BUILDINGS[buildingId];
     if (!def)  return { success: false, reason: 'Unknown building' };
@@ -707,7 +865,6 @@ export class City extends EventEmitter {
     return { success: true };
   }
 
-  /** Place roads/bridges along a pre-computed tile list. Checks total cost first. */
   placeRoadLine(tiles) {
     let totalCost = 0;
     const placeable = [];
@@ -738,7 +895,6 @@ export class City extends EventEmitter {
     return { placed, cost: spent, errors: [] };
   }
 
-  /** Paint a zone rectangle. Zone painting is free. */
   placeZoneRect(tiles, zoneType) {
     let placed = 0, skipped = 0;
     for (const tile of tiles)
@@ -747,7 +903,6 @@ export class City extends EventEmitter {
     return { placed, skipped };
   }
 
-  /** Demolish building/road on a tile. */
   demolish(x, z) {
     const tile = this._grid.getTile(x, z);
     if (!tile)                   return { success: false, reason: 'Invalid tile' };
@@ -765,15 +920,10 @@ export class City extends EventEmitter {
 
   // ── Detail getters (for modal dialogs) ──────────────────────────
 
-  /**
-   * Full financial breakdown for the monthly economy modal.
-   * @returns {object}
-   */
   getFinancialDetails() {
     const stats = this._grid.getStats();
     const CFG   = SIMULATION_CONFIG;
 
-    // Recompute supply-chain tax multiplier (mirrors processMonth exactly)
     const totalCBldg  = stats.cBuildings;
     const totalIBldg  = stats.iBuildings;
     const suppliedC   = Math.min(totalCBldg, totalIBldg * CFG.cSupplyRatio);
@@ -802,9 +952,9 @@ export class City extends EventEmitter {
     for (const b of stats.allBuildings) {
       const def = b.def;
       const up  = def.monthlyUpkeep;
-      if      (def.zoneType === 'R') { rTax += (b.residents || 0) * 10 * ie;                                                               rCount++; groups.residential.amount += up; groups.residential.count++; }
-      else if (def.zoneType === 'C') { if (b.laborState !== 'abandoned') cTax += 50 * cTaxMult * le * ie;                                  cCount++; groups.commercial.amount  += up; groups.commercial.count++;  }
-      else if (def.zoneType === 'I') { if (b.laborState !== 'abandoned') iTax += 80 * (b.fillPercentage ?? 1.0) * le * ie;                 iCount++; groups.industrial.amount  += up; groups.industrial.count++;  }
+      if      (def.zoneType === 'R') { rTax += (b.residents || 0) * 10 * ie;                                         rCount++; groups.residential.amount += up; groups.residential.count++; }
+      else if (def.zoneType === 'C') { if (b.laborState !== 'abandoned') cTax += 50 * cTaxMult * le * ie;            cCount++; groups.commercial.amount  += up; groups.commercial.count++;  }
+      else if (def.zoneType === 'I') { if (b.laborState !== 'abandoned') iTax += 80 * (b.fillPercentage ?? 1.0) * le * ie; iCount++; groups.industrial.amount  += up; groups.industrial.count++;  }
       else if (def.id === 'police_station')                              { groups.police.amount    += up; groups.police.count++;    }
       else if (def.id === 'fire_station')                                { groups.fire.amount      += up; groups.fire.count++;      }
       else if (def.id === 'hospital')                                    { groups.hospital.amount  += up; groups.hospital.count++;  }
@@ -829,10 +979,6 @@ export class City extends EventEmitter {
     };
   }
 
-  /**
-   * Population breakdown for the population modal.
-   * @returns {object}
-   */
   getPopulationDetails() {
     const stats     = this._grid.getStats();
     const employed  = Math.min(stats.population, stats.totalJobs);
@@ -856,16 +1002,11 @@ export class City extends EventEmitter {
     };
   }
 
-  /**
-   * Happiness breakdown for the happiness modal.
-   * @returns {object}
-   */
   getHappinessDetails() {
     const s       = this._state;
     const powerOK = s.totalPowerAvailable >= s.totalPowerNeeded;
     const waterOK = s.totalWaterAvailable >= s.totalWaterNeeded;
 
-    // Aggregate service contributions grouped by building name
     const byName = {};
     for (const t of this._grid.getAllTiles()) {
       if (!t.building || t.building.def.category !== 'service') continue;
@@ -894,13 +1035,9 @@ export class City extends EventEmitter {
     return { current: s.happiness, powerOK, waterOK, modifiers };
   }
 
-  /**
-   * Per-zone demand breakdown with labelled modifier rows.
-   * @returns {object}
-   */
   getRCIDetails() {
     const s   = this._state;
-    const bd  = this._rciBreakdown;         // may be null before first sim tick
+    const bd  = this._rciBreakdown;
     const tot = bd?.totals ?? {};
     const pct = v => `${Math.round((v ?? 0) * 100)}%`;
     const mk  = (label, good, note, score) => ({ label, good, note, score });

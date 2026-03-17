@@ -105,6 +105,29 @@
     </div>
   </div>
 
+  <!-- Pause menu overlay -->
+  <div id="pause-overlay" class="hidden">
+    <div id="pause-panel">
+      <div id="pause-title">🏙️ CityBuilder</div>
+      <div id="pause-subtitle">PAUSED</div>
+      <div class="pause-divider"></div>
+      <button id="btn-save-expand" class="pause-btn">💾 Save Game ▾</button>
+      <div id="save-slots" class="slot-picker hidden"></div>
+      <button id="btn-load-expand" class="pause-btn">📂 Load Game ▾</button>
+      <div id="load-slots" class="slot-picker hidden"></div>
+      <div class="pause-divider"></div>
+      <button id="btn-resume" class="pause-btn pause-primary">▶ Resume</button>
+      <button id="btn-new-game" class="pause-btn">🔄 New Game</button>
+      <div id="new-game-confirm" class="hidden pause-confirm">
+        <p>Start a new game? All unsaved progress will be lost.</p>
+        <button id="btn-new-game-confirm" class="pause-btn pause-danger">Confirm New Game</button>
+        <button id="btn-new-game-cancel" class="pause-btn">Cancel</button>
+      </div>
+      <div class="pause-divider"></div>
+      <div id="pause-footer">Press Esc to resume</div>
+    </div>
+  </div>
+
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

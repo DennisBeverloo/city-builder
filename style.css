@@ -501,12 +501,175 @@ html, body {
   margin-top: 8px;
 }
 
-/* ── Speed controls (future) ── */
-#speed-controls {
+/* ── Speed controls ── */
+#toolbar button.speed-active {
+  background: #3a3a70;
+  border-color: #6060cc;
+  color: #fff;
+}
+
+/* ── Pause overlay ── */
+#pause-overlay {
   position: fixed;
-  top: 10px;
-  left: 10px;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 400;
   display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#pause-overlay.hidden { display: none; }
+
+#pause-panel {
+  background: #0d0d1f;
+  border: 1px solid #444;
+  border-radius: 10px;
+  width: min(300px, 90vw);
+  padding: 24px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+}
+
+#pause-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #aac8ff;
+  text-align: center;
+}
+
+#pause-subtitle {
+  font-size: 11px;
+  color: #555;
+  text-align: center;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.pause-divider {
+  height: 1px;
+  background: #222;
+  margin: 4px 0;
+}
+
+.pause-btn {
+  width: 100%;
+  padding: 9px 14px;
+  border: 1px solid #333;
+  background: #1e1e3a;
+  color: #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.pause-btn:hover:not(:disabled) {
+  background: #2a2a50;
+  border-color: #555;
+  color: #fff;
+}
+.pause-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pause-primary {
+  background: #2a3a70;
+  border-color: #4a5aaa;
+  color: #aac8ff;
+  font-weight: bold;
+}
+.pause-primary:hover {
+  background: #3a4a80;
+  border-color: #6a7acc;
+}
+
+.pause-danger {
+  background: #3a1a1a;
+  border-color: #7a3030;
+  color: #ef9a9a;
+}
+.pause-danger:hover {
+  background: #4a2020;
+  border-color: #cc5555;
+}
+
+.pause-confirm {
+  background: #151528;
+  border: 1px solid #2a1a1a;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pause-confirm.hidden { display: none; }
+.pause-confirm p {
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.5;
+}
+
+.slot-picker {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  z-index: 200;
+  padding: 6px 0 2px;
+}
+.slot-picker.hidden { display: none; }
+
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #151528;
+  border: 1px solid #222;
+  border-radius: 5px;
+}
+
+.slot-label {
+  font-size: 12px;
+  color: #888;
+  min-width: 42px;
+  white-space: nowrap;
+}
+
+.slot-desc {
+  font-size: 11px;
+  color: #666;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-action-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid #333;
+  background: #1e1e3a;
+  color: #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.slot-action-btn:hover:not(:disabled) {
+  background: #2a2a50;
+  border-color: #555;
+  color: #fff;
+}
+.slot-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#pause-footer {
+  font-size: 10px;
+  color: #444;
+  text-align: center;
+  letter-spacing: 0.5px;
 }
