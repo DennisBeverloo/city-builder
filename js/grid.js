@@ -448,9 +448,9 @@ export class Grid {
       primary_school: { field: 'education', strength: 25 },
       high_school:    { field: 'education', strength: 50 },
       university:     { field: 'education', strength: 75 },
-      park_small:     { field: 'parks',     strength: 20 },
-      park_medium:    { field: 'parks',     strength: 35 },
-      park_large:     { field: 'parks',     strength: 60 },
+      park_small:     { field: 'parks',     strength: 15 },
+      park_medium:    { field: 'parks',     strength: 55 },
+      park_large:     { field: 'parks',     strength: 95 },
     };
   }
 
@@ -502,10 +502,10 @@ export class Grid {
     for (const t of this.getAllTiles()) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.18;
-      score += sc.fire      * 0.15;
-      score += sc.hospital  * 0.32;
-      score += sc.education * 0.32;
+      score += sc.police    * 0.20;
+      score += sc.fire      * 0.18;
+      score += sc.hospital  * 0.48;
+      score += sc.education * 0.52;
       score += sc.parks     * 0.65;
       score -= t.pollution  * 0.50;
       t.happiness = Math.max(0, Math.min(100, score));
