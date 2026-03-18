@@ -259,6 +259,86 @@ function _applyUnlocks(level) {
   });
 }
 
+// ── Heatmap controls ──────────────────────────────────────────────────────────
+
+let _activeHeatmap = null;
+
+/** @returns {string|null} Active heatmap type, or null if none. */
+export function getActiveHeatmap() { return _activeHeatmap; }
+
+const _HEATMAP_TYPES = [
+  { id: null,        label: '✕ None',       title: 'Turn off heatmap' },
+  { id: 'happiness', label: '😊 Happiness',  title: 'Happiness heatmap' },
+  { id: 'pollution', label: '☁️ Pollution',  title: 'Pollution heatmap' },
+  { id: 'landValue', label: '🏡 Land Value', title: 'Land value heatmap' },
+  { id: 'police',    label: '🚔 Police',     title: 'Police coverage heatmap' },
+  { id: 'fire',      label: '🚒 Fire',       title: 'Fire coverage heatmap' },
+  { id: 'hospital',  label: '🏥 Hospital',   title: 'Hospital coverage heatmap' },
+  { id: 'education', label: '🎒 Education',  title: 'Education coverage heatmap' },
+];
+
+/**
+ * Build the heatmap toggle button + flyout panel in the toolbar.
+ * @param {function(string|null): void} onChange  Called with the new heatmap type (or null).
+ */
+export function initHeatmapControls(onChange) {
+  const group = document.getElementById('group-heatmap');
+  if (!group) return;
+
+  // Build flyout
+  const flyout = document.createElement('div');
+  flyout.id        = 'flyout-heatmap';
+  flyout.className = 'toolbar-flyout hidden';
+
+  const flyoutLabel = document.createElement('div');
+  flyoutLabel.className   = 'flyout-label';
+  flyoutLabel.textContent = 'Heatmap';
+  flyout.appendChild(flyoutLabel);
+
+  // Toggle button (created before buttons so the click handler can reference it)
+  const toggle = document.createElement('button');
+  toggle.className   = 'toolbar-menu-toggle';
+  toggle.textContent = '🌡️ Heatmap ▾';
+
+  for (const { id, label, title } of _HEATMAP_TYPES) {
+    const btn = document.createElement('button');
+    btn.textContent     = label;
+    btn.title           = title;
+    btn.dataset.heatmap = id ?? '';
+    if (id === null) btn.classList.add('active');
+
+    btn.addEventListener('click', () => {
+      _activeHeatmap = id;
+      flyout.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      toggle.textContent = id ? `${label} ▾` : '🌡️ Heatmap ▾';
+      toggle.classList.toggle('menu-group-active', !!id);
+      flyout.classList.add('hidden');
+      onChange(id);
+    });
+
+    flyout.appendChild(btn);
+  }
+
+  document.body.appendChild(flyout);
+
+  // Wire toggle
+  group.innerHTML = '';
+  group.appendChild(toggle);
+
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = !flyout.classList.contains('hidden');
+    document.querySelectorAll('.toolbar-flyout').forEach(f => f.classList.add('hidden'));
+    if (!isOpen) {
+      const rect          = toggle.getBoundingClientRect();
+      flyout.style.left   = `${rect.left}px`;
+      flyout.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+      flyout.classList.remove('hidden');
+    }
+  });
+}
+
 /**
  * Deselect the current tool (right-click cancels to select).
  */

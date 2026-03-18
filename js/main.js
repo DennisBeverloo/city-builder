@@ -5,7 +5,7 @@
  * drag-to-build for roads (straight lines) and zones (rectangles).
  */
 import * as THREE from 'three';
-import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid, showRangeOverlay, hideRangeOverlay } from './scene.js';
+import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid, showRangeOverlay, hideRangeOverlay, showHeatmap, hideHeatmap } from './scene.js';
 import { Grid }    from './grid.js';
 import { City }    from './city.js';
 import { generateTerrain, clearForestAt } from './terrain.js';
@@ -13,6 +13,7 @@ import {
   initToolbar, initHUD, initNotifications, initDebugPanel,
   getActiveTool, resetTool, showTileInfo, showNotification,
   initSpeedControls, initPauseMenu,
+  initHeatmapControls, getActiveHeatmap,
 } from './ui.js';
 import { BUILDINGS } from './buildings.js';
 import { initModalTriggers } from './modals.js';
@@ -41,6 +42,18 @@ initPauseMenu(city);
 
 city.on('laborStateChanged', applyLaborStateColors);
 
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+
+function _refreshHeatmap() {
+  const type = getActiveHeatmap();
+  if (type) showHeatmap(grid, type);
+  else hideHeatmap();
+}
+
+initHeatmapControls(_refreshHeatmap);
+city.on('dayTick',        _refreshHeatmap);
+city.on('monthProcessed', _refreshHeatmap);
+
 // ── Scene rebuild after load / reset ─────────────────────────────────────────
 
 city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
@@ -50,6 +63,7 @@ city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
   // Rebuild floor colors and building meshes from grid state.
   rebuildSceneFromGrid(grid);
+  _refreshHeatmap();
 });
 
 city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
@@ -62,6 +76,7 @@ city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
   grid.setDecorationRemover((x, z) => clearForestAt(scene, x, z));
   // Update floor colors.
   rebuildSceneFromGrid(grid);
+  _refreshHeatmap();
 });
 
 city.emit('stateChanged', city.getState());

@@ -168,6 +168,78 @@ export function hideRangeOverlay() {
   _activeOverlay = [];
 }
 
+// ── Heatmap overlay ───────────────────────────────────────────────────────────
+
+const _HEATMAP_GEO = new THREE.PlaneGeometry(0.92, 0.92);
+const _hc1 = new THREE.Color();
+const _hc2 = new THREE.Color();
+
+let _heatmapQuads = null; // _heatmapQuads[z][x] = Mesh, lazily created
+
+function _ensureHeatmapGrid() {
+  if (_heatmapQuads) return;
+  _heatmapQuads = [];
+  for (let z = 0; z < GRID_SIZE; z++) {
+    _heatmapQuads[z] = [];
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const mat  = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.65, depthWrite: false });
+      const quad = new THREE.Mesh(_HEATMAP_GEO, mat);
+      quad.rotation.x = -Math.PI / 2;
+      quad.position.set(x + 0.5, 0.076, z + 0.5); // _TILE_H + 0.016, above range overlay
+      quad.visible = false;
+      _scene.add(quad);
+      _heatmapQuads[z][x] = quad;
+    }
+  }
+}
+
+function _triGradient(t, hexLow, hexMid, hexHigh) {
+  if (t <= 0.5) return _hc1.setHex(hexLow).lerp(_hc2.setHex(hexMid), t * 2).getHex();
+  return _hc1.setHex(hexMid).lerp(_hc2.setHex(hexHigh), (t - 0.5) * 2).getHex();
+}
+
+function _duoGradient(t, hexLow, hexHigh) {
+  return _hc1.setHex(hexLow).lerp(_hc2.setHex(hexHigh), t).getHex();
+}
+
+function _tileHeatColor(type, tile) {
+  switch (type) {
+    case 'happiness':  return _triGradient(tile.happiness  / 100, 0xcc2200, 0xffcc00, 0x33bb33);
+    case 'pollution':  return _triGradient(tile.pollution  / 100, 0x33bb33, 0xffcc00, 0xcc2200);
+    case 'landValue':  return _triGradient(tile.landValue  / 100, 0x001155, 0x0099bb, 0xeeeeff);
+    case 'police':     return _duoGradient(tile.serviceCoverage.police    / 100, 0x050520, 0x2244ff);
+    case 'fire':       return _duoGradient(tile.serviceCoverage.fire      / 100, 0x200500, 0xff4400);
+    case 'hospital':   return _duoGradient(tile.serviceCoverage.hospital  / 100, 0x011a0a, 0x00cc55);
+    case 'education':  return _duoGradient(tile.serviceCoverage.education / 100, 0x150020, 0xaa33ff);
+    default:           return 0x000000;
+  }
+}
+
+/**
+ * Render a full-grid heatmap overlay. Call on every dayTick / monthProcessed.
+ * @param {import('./grid.js').Grid} grid
+ * @param {'happiness'|'pollution'|'landValue'|'police'|'fire'|'hospital'|'education'} type
+ */
+export function showHeatmap(grid, type) {
+  _ensureHeatmapGrid();
+  for (let z = 0; z < GRID_SIZE; z++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const tile = grid.getTile(x, z);
+      const quad = _heatmapQuads[z][x];
+      if (!tile || !quad) continue;
+      quad.material.color.setHex(_tileHeatColor(type, tile));
+      quad.visible = true;
+    }
+  }
+}
+
+/** Remove the heatmap overlay. */
+export function hideHeatmap() {
+  if (!_heatmapQuads) return;
+  for (const row of _heatmapQuads)
+    for (const quad of row) quad.visible = false;
+}
+
 // ── Post-load scene rebuild ───────────────────────────────────────────────────
 
 const _TILE_H = 0.06;
