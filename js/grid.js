@@ -502,11 +502,11 @@ export class Grid {
     for (const t of this.getAllTiles()) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.12;
-      score += sc.fire      * 0.10;
-      score += sc.hospital  * 0.22;
-      score += sc.education * 0.22;
-      score += sc.parks     * 0.40;
+      score += sc.police    * 0.18;
+      score += sc.fire      * 0.15;
+      score += sc.hospital  * 0.32;
+      score += sc.education * 0.32;
+      score += sc.parks     * 0.65;
       score -= t.pollution  * 0.50;
       t.happiness = Math.max(0, Math.min(100, score));
     }
