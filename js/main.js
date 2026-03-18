@@ -287,8 +287,23 @@ canvas.addEventListener('mousemove', e => {
     hideRangeOverlay();
   }
 
-  // Regular hover
-  grid.setHover(tile);
+  // Footprint hover for multi-tile buildings; regular hover otherwise
+  const def = tool?.type === 'building' ? BUILDINGS[tool.buildingId] : null;
+  const [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
+  if (tile && (bw > 1 || bd > 1)) {
+    const footprintTiles = [];
+    for (let dx = 0; dx < bw; dx++) {
+      for (let dz = 0; dz < bd; dz++) {
+        const ft = grid.getTile(tile.x + dx, tile.z - dz);
+        if (ft) footprintTiles.push(ft);
+      }
+    }
+    grid.setHover(null);
+    grid.setPreview(footprintTiles, tool);
+  } else {
+    grid.clearPreview();
+    grid.setHover(tile);
+  }
 });
 
 // ── mouseup ───────────────────────────────────────────────────────

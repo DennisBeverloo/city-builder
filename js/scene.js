@@ -144,8 +144,8 @@ export function showRangeOverlay(cx, cz, radius) {
   const z1 = Math.min(GRID_SIZE - 1, Math.ceil(cz + radius));
   for (let z = z0; z <= z1; z++) {
     for (let x = x0; x <= x1; x++) {
-      const dist = Math.abs((x + 0.5) - cx) + Math.abs((z + 0.5) - cz);
-      if (dist > radius + 0.5) continue;
+      // Chebyshev distance → square in world space → diamond on isometric screen
+      if (Math.abs((x + 0.5) - cx) > radius || Math.abs((z + 0.5) - cz) > radius) continue;
       let quad = _overlayPool.pop();
       if (!quad) {
         quad = new THREE.Mesh(_OVERLAY_GEO, _OVERLAY_MAT);

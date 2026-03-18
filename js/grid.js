@@ -631,6 +631,11 @@ export class Grid {
       }
       return PREVIEW.road;
     }
+    if (tool.type === 'building' && tool.buildingId !== 'road') {
+      if (tile.type === 'terrain' && tile.terrainType === 'river') return PREVIEW.zone_bad;
+      if (tile.building) return PREVIEW.zone_bad;
+      return 0xb3e5fc; // light blue: valid building placement
+    }
     if (tool.type === 'zone') {
       if (tile.type === 'terrain' && tile.terrainType !== 'forest') return PREVIEW.zone_bad;
       if (tile.type === 'road') return PREVIEW.zone_bad;
