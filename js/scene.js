@@ -168,6 +168,111 @@ export function hideRangeOverlay() {
   _activeOverlay = [];
 }
 
+// ── Road markings ─────────────────────────────────────────────────────────────
+
+/**
+ * 4-bit connectivity key: bit3=N, bit2=S, bit1=E, bit0=W.
+ * A neighbour counts as connected if it is also a road or bridge tile.
+ */
+function _connectivityKey(grid, tile) {
+  const isRoad = t => t && (t.type === 'road');
+  const n = isRoad(grid.getTile(tile.x,     tile.z - 1)) ? 8 : 0;
+  const s = isRoad(grid.getTile(tile.x,     tile.z + 1)) ? 4 : 0;
+  const e = isRoad(grid.getTile(tile.x + 1, tile.z    )) ? 2 : 0;
+  const w = isRoad(grid.getTile(tile.x - 1, tile.z    )) ? 1 : 0;
+  return n | s | e | w;
+}
+
+const _roadMaterials = new Array(16).fill(null);
+
+function _buildRoadTexture(key) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx  = canvas.getContext('2d');
+  const size = 128, half = 64, sw = 9; // sw = sidewalk strip width
+
+  const n = (key >> 3) & 1, s = (key >> 2) & 1;
+  const e = (key >> 1) & 1, w = key & 1;
+
+  // Road base
+  ctx.fillStyle = '#37474f';
+  ctx.fillRect(0, 0, size, size);
+
+  // Sidewalk strips on unconnected sides
+  ctx.fillStyle = '#546e7a';
+  if (!n) ctx.fillRect(0, 0, size, sw);
+  if (!s) ctx.fillRect(0, size - sw, size, sw);
+  if (!w) ctx.fillRect(0, 0, sw, size);
+  if (!e) ctx.fillRect(size - sw, 0, sw, size);
+
+  // Dashed center line toward each connected neighbour
+  ctx.strokeStyle = '#78909c';
+  ctx.lineWidth   = 3;
+  ctx.lineCap     = 'butt';
+  ctx.setLineDash([10, 7]);
+
+  const line = (x1, y1, x2, y2) => {
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  };
+  if (n) line(half, half, half, 0);
+  if (s) line(half, half, half, size);
+  if (w) line(half, half, 0,    half);
+  if (e) line(half, half, size, half);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.flipY = false; // canvas top = north, matches BoxGeometry top-face UV
+  return tex;
+}
+
+function _getRoadMaterial(key) {
+  if (!_roadMaterials[key]) {
+    _roadMaterials[key] = new THREE.MeshLambertMaterial({ map: _buildRoadTexture(key) });
+  }
+  return _roadMaterials[key];
+}
+
+/**
+ * Update road tile floor materials and bridge railing visibility to match
+ * each tile's connectivity. Call after any road placement, demolition, or
+ * scene rebuild.
+ * @param {import('./grid.js').Grid} grid
+ */
+export function updateRoadMarkings(grid) {
+  for (const tile of grid.getAllTiles()) {
+    if (tile.type !== 'road') continue;
+
+    const key = _connectivityKey(grid, tile);
+
+    if (!tile.isBridge) {
+      // Apply road marking texture to the floor tile
+      if (tile.mesh) tile.mesh.material = _getRoadMaterial(key);
+    } else {
+      // Fix bridge railing visibility: only show rails perpendicular to traffic
+      const mesh = tile.building?.mesh;
+      if (!mesh || mesh.children.length < 5) continue;
+
+      const hasNS = ((key >> 3) & 1) || ((key >> 2) & 1); // north or south connected
+      const hasEW = ((key >> 1) & 1) || (key & 1);        // east or west connected
+      const isNS  = hasNS && !hasEW; // unambiguously north-south traffic
+
+      // children[1]=west bar, [2]=east bar, [3]=north bar, [4]=south bar
+      if (isNS) {
+        // Traffic flows N-S → side railings on E and W, no end bars
+        mesh.children[1].visible = true;   // west  ✓
+        mesh.children[2].visible = true;   // east  ✓
+        mesh.children[3].visible = false;  // north ✗
+        mesh.children[4].visible = false;  // south ✗
+      } else {
+        // Traffic flows E-W (default) → side railings on N and S, no end bars
+        mesh.children[1].visible = false;  // west  ✗
+        mesh.children[2].visible = false;  // east  ✗
+        mesh.children[3].visible = true;   // north ✓
+        mesh.children[4].visible = true;   // south ✓
+      }
+    }
+  }
+}
+
 // ── Heatmap overlay ───────────────────────────────────────────────────────────
 
 const _HEATMAP_GEO = new THREE.PlaneGeometry(0.92, 0.92);

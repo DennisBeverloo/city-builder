@@ -5,7 +5,7 @@
  * drag-to-build for roads (straight lines) and zones (rectangles).
  */
 import * as THREE from 'three';
-import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid, showRangeOverlay, hideRangeOverlay, showHeatmap, hideHeatmap } from './scene.js';
+import { initScene, getCamera, getRenderer, getControls, render, applyLaborStateColors, rebuildSceneFromGrid, showRangeOverlay, hideRangeOverlay, showHeatmap, hideHeatmap, updateRoadMarkings } from './scene.js';
 import { Grid }    from './grid.js';
 import { City }    from './city.js';
 import { generateTerrain, clearForestAt } from './terrain.js';
@@ -56,6 +56,8 @@ city.on('monthProcessed', _refreshHeatmap);
 
 // ── Scene rebuild after load / reset ─────────────────────────────────────────
 
+city.on('stateChanged', () => updateRoadMarkings(grid));
+
 city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   // Remove stale building meshes from scene.
   for (const mesh of oldMeshes) scene.remove(mesh);
@@ -63,6 +65,7 @@ city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
   // Rebuild floor colors and building meshes from grid state.
   rebuildSceneFromGrid(grid);
+  updateRoadMarkings(grid);
   _refreshHeatmap();
 });
 
@@ -76,11 +79,13 @@ city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
   grid.setDecorationRemover((x, z) => clearForestAt(scene, x, z));
   // Update floor colors.
   rebuildSceneFromGrid(grid);
+  updateRoadMarkings(grid);
   _refreshHeatmap();
 });
 
 city.emit('stateChanged', city.getState());
 city.emit('dayTick',      city.getState());
+updateRoadMarkings(grid);
 
 // ── Raycasting ───────────────────────────────────────────────────────────────
 
