@@ -205,7 +205,11 @@ function _buildRoadTexture(key) {
   if (!w) ctx.fillRect(0, 0, sw, size);
   if (!e) ctx.fillRect(size - sw, 0, sw, size);
 
-  // Dashed center line toward each connected neighbour
+  // Dashed center line.
+  // Pure straight roads (exactly N+S or exactly E+W) get a single edge-to-edge
+  // line for a clean, uniform dash pattern with no doubled centre mark.
+  // All other patterns (turns, T-junctions, 4-way, dead-ends) draw each arm
+  // outward from centre so every corner is always anchored by a visible dash.
   ctx.strokeStyle = '#78909c';
   ctx.lineWidth   = 3;
   ctx.lineCap     = 'butt';
@@ -214,10 +218,14 @@ function _buildRoadTexture(key) {
   const line = (x1, y1, x2, y2) => {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   };
-  if (n) line(half, half, half, 0);
-  if (s) line(half, half, half, size);
-  if (w) line(half, half, 0,    half);
-  if (e) line(half, half, size, half);
+  if      (key === 12) line(half, 0,    half, size);  // pure N-S
+  else if (key ===  3) line(0,    half, size, half);  // pure E-W
+  else {
+    if (n) line(half, half, half, 0);
+    if (s) line(half, half, half, size);
+    if (e) line(half, half, size, half);
+    if (w) line(half, half, 0,    half);
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.flipY = false; // canvas top = north, matches BoxGeometry top-face UV

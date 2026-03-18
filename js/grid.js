@@ -126,11 +126,21 @@ export class Grid {
   }
 
   _setTileColor(tile, color) {
-    tile.mesh.material = new THREE.MeshLambertMaterial({ color });
+    if (tile.mesh?.material?.map) {
+      // Texture-based material (e.g. road markings): tint only, don't replace
+      tile.mesh.material.color.setHex(color);
+    } else {
+      tile.mesh.material = new THREE.MeshLambertMaterial({ color });
+    }
   }
 
   _restoreColor(tile) {
-    this._setTileColor(tile, this._tileColor(tile));
+    if (tile.mesh?.material?.map) {
+      // Remove any hover/preview tint from texture-based material
+      tile.mesh.material.color.setHex(0xffffff);
+    } else {
+      this._setTileColor(tile, this._tileColor(tile));
+    }
   }
 
   _removeBuildingMesh(x, z) {
