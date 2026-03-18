@@ -449,8 +449,8 @@ export class Grid {
       high_school:    { field: 'education', strength: 50 },
       university:     { field: 'education', strength: 75 },
       park_small:     { field: 'parks',     strength: 15 },
-      park_medium:    { field: 'parks',     strength: 55 },
-      park_large:     { field: 'parks',     strength: 95 },
+      park_medium:    { field: 'parks',     strength: 45 },
+      park_large:     { field: 'parks',     strength: 78 },
     };
   }
 
