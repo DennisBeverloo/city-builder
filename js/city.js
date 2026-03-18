@@ -621,7 +621,7 @@ export class City extends EventEmitter {
       supplyChain = suppliedCBuildings / cBldg;
     }
 
-    const cRaw = customerBase * 0.50 + workerC * 0.30 + supplyChain * 0.20;
+    const cRaw = customerBase * 0.55 + supplyChain * 0.30 + workerC * 0.15;
 
     let workerI = clamp(workers / Math.max(iJobs * 2, 1), 0, 1);
     if (workers < iJobs * 0.5) workerI *= 0.3;
@@ -636,7 +636,7 @@ export class City extends EventEmitter {
       marketDemand = clamp(1.0 / supplyRatio, 0.1, 1.0);
     }
 
-    const iRaw = marketDemand * 0.65 + workerI * 0.35;
+    const iRaw = marketDemand * 0.75 + workerI * 0.25;
 
     let rScore = clamp(rRaw * 100, 0, 100);
     let cScore = clamp(cRaw * 100, 0, 100);
@@ -673,14 +673,14 @@ export class City extends EventEmitter {
           laborEfficiency,
         },
         c: {
-          worker_supply: { score: workerC,      weight: 0.30 },
-          customer_base: { score: customerBase, weight: 0.50 },
-          supply_chain:  { score: supplyChain,  weight: 0.20 },
+          customer_base: { score: customerBase, weight: 0.55 },
+          supply_chain:  { score: supplyChain,  weight: 0.30 },
+          worker_supply: { score: workerC,      weight: 0.15 },
           floor:         cFloor,
         },
         i: {
-          worker_supply: { score: workerI,      weight: 0.35 },
-          market_demand: { score: marketDemand, weight: 0.65 },
+          market_demand: { score: marketDemand, weight: 0.75 },
+          worker_supply: { score: workerI,      weight: 0.25 },
           floor:         iFloor,
         },
         totals: {
@@ -1102,31 +1102,31 @@ export class City extends EventEmitter {
       C: {
         demand: s.rciDemand.C,
         modifiers: [
-          mk('Worker supply (×0.30)',
-             (bd?.c?.worker_supply?.score ?? 0) >= 0.5,
-             `${r(tot.workers)} workers / ${r(tot.cJobs)} C-job slots → score ${pct(bd?.c?.worker_supply?.score)}`,
-             bd?.c?.worker_supply?.score),
-          mk('Customer base (×0.50)',
+          mk('Customer base (×0.55)',
              (bd?.c?.customer_base?.score ?? 0) >= 0.5,
              `${r(tot.shoppers)} residents / (${r(tot.cBldg)} shops × 35) → score ${pct(bd?.c?.customer_base?.score)}`,
              bd?.c?.customer_base?.score),
-          mk('Supply chain — I→C (×0.20)',
+          mk('Supply chain — I→C (×0.30)',
              (bd?.c?.supply_chain?.score ?? 0) >= 0.5,
              `${r(tot.suppliedCBuildings)} supplied / ${r(tot.cBldg)} C-buildings → score ${pct(bd?.c?.supply_chain?.score)}`,
              bd?.c?.supply_chain?.score),
+          mk('Worker supply (×0.15)',
+             (bd?.c?.worker_supply?.score ?? 0) >= 0.5,
+             `${r(tot.workers)} workers / ${r(tot.cJobs)} C-job slots → score ${pct(bd?.c?.worker_supply?.score)}`,
+             bd?.c?.worker_supply?.score),
         ],
       },
       I: {
         demand: s.rciDemand.I,
         modifiers: [
-          mk('Worker supply (×0.35)',
-             (bd?.i?.worker_supply?.score ?? 0) >= 0.5,
-             `${r(tot.workers)} workers / ${r(tot.iJobs)} I-job slots → score ${pct(bd?.i?.worker_supply?.score)}`,
-             bd?.i?.worker_supply?.score),
-          mk('Market demand — C←I (×0.65)',
+          mk('Market demand — C←I (×0.75)',
              (bd?.i?.market_demand?.score ?? 0) >= 0.5,
              `${r(tot.cBldg)} C-buildings / (${r(tot.iBldg)} I-buildings × ${SIMULATION_CONFIG.cSupplyRatio}) → score ${pct(bd?.i?.market_demand?.score)}`,
              bd?.i?.market_demand?.score),
+          mk('Worker supply (×0.25)',
+             (bd?.i?.worker_supply?.score ?? 0) >= 0.5,
+             `${r(tot.workers)} workers / ${r(tot.iJobs)} I-job slots → score ${pct(bd?.i?.worker_supply?.score)}`,
+             bd?.i?.worker_supply?.score),
         ],
       },
     };
