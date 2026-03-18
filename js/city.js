@@ -599,9 +599,10 @@ export class City extends EventEmitter {
     const workerShortageRatio   = laborEfficiency;
     const laborDemandMultiplier = Math.pow(workerShortageRatio, 1.5);
 
-    const jobAvail     = clamp(clamp(effectiveJobs / Math.max(workers, 1), 0, 2) / 2, 0, 1);
+    const jobRatio     = effectiveJobs / Math.max(workers, 1);
+    const jobAvail     = clamp(jobRatio / 1.5, 0, 1);
     const happinessScr = this._state.happiness / 100;
-    const rRaw         = jobAvail * 0.80 + happinessScr * 0.20;
+    const rRaw         = jobAvail * 0.60 + happinessScr * 0.40;
 
     let workerC = clamp(workers / Math.max(cJobs * 2, 1), 0, 1);
     if (workers < cJobs * 0.5) workerC *= 0.3;
@@ -666,8 +667,8 @@ export class City extends EventEmitter {
       rDemand, cDemand, iDemand,
       breakdown: {
         r: {
-          job_availability: { score: jobAvail,     weight: 0.80 },
-          happiness:        { score: happinessScr, weight: 0.20 },
+          job_availability: { score: jobAvail,     weight: 0.60 },
+          happiness:        { score: happinessScr, weight: 0.40 },
           floor:            rFloor,
           laborEfficiency,
         },
@@ -1088,7 +1089,7 @@ export class City extends EventEmitter {
       R: {
         demand: s.rciDemand.R,
         modifiers: [
-          mk('Job availability (×0.80)',
+          mk('Job availability (×0.60)',
              (bd?.r?.job_availability?.score ?? 0) >= 0.5,
              `effectiveJobs ${r(tot.effectiveJobs)} / workers ${r(tot.workers)} → score ${pct(bd?.r?.job_availability?.score)}`,
              bd?.r?.job_availability?.score),
