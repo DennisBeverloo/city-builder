@@ -186,6 +186,21 @@ function calcRoadDragCost(tiles) {
   return { roadCount, bridgeCount, invalidCount, totalCost };
 }
 
+// ── Heatmap tile value ────────────────────────────────────────────────────────
+
+function _heatmapTileValue(type, tile) {
+  switch (type) {
+    case 'happiness':  return tile.happiness;
+    case 'pollution':  return tile.pollution;
+    case 'landValue':  return tile.landValue;
+    case 'police':     return tile.serviceCoverage.police;
+    case 'fire':       return tile.serviceCoverage.fire;
+    case 'hospital':   return tile.serviceCoverage.hospital;
+    case 'education':  return tile.serviceCoverage.education;
+    default:           return 0;
+  }
+}
+
 // ── Cost toast ───────────────────────────────────────────────────────────────
 
 const _toastVec = new THREE.Vector3();
@@ -302,6 +317,18 @@ canvas.addEventListener('mousemove', e => {
     hideRangeOverlay();
   }
 
+  // Heatmap value tooltip on hover
+  const heatmapType = getActiveHeatmap();
+  if (heatmapType && tile && !_isDragging) {
+    const val = _heatmapTileValue(heatmapType, tile);
+    const label = { happiness: 'Happiness', pollution: 'Pollution', landValue: 'Land Value',
+      police: 'Police', fire: 'Fire', hospital: 'Hospital', education: 'Education' }[heatmapType];
+    _dragTextEl.textContent = `${label}: ${Math.round(val)}`;
+    _dragInfoEl.classList.remove('hidden');
+  } else if (!_isDragging) {
+    hideDragInfo();
+  }
+
   // Footprint hover for multi-tile buildings; regular hover otherwise
   const def = tool?.type === 'building' ? BUILDINGS[tool.buildingId] : null;
   const [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
@@ -350,7 +377,7 @@ canvas.addEventListener('mouseup', e => {
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (!_isDragging) { grid.setHover(null); hideRangeOverlay(); }
+  if (!_isDragging) { grid.setHover(null); hideRangeOverlay(); hideDragInfo(); }
 });
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
