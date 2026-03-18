@@ -442,11 +442,12 @@ function _refreshDebug() {
   const tot     = bd?.totals ?? {};
 
   // Labour market values (Fix 8)
-  const workers   = Math.round(tot.workers  ?? 0);
-  const cJobs     = Math.round(tot.cJobs    ?? stats.cJobs  ?? 0);
-  const iJobs     = Math.round(tot.iJobs    ?? stats.iJobs  ?? 0);
-  const totalJobs = cJobs + iJobs;
-  const balance   = workers - totalJobs;
+  const workers     = Math.round(tot.workers     ?? 0);
+  const cJobs       = Math.round(tot.cJobs       ?? stats.cJobs  ?? 0);
+  const iJobs       = Math.round(tot.iJobs       ?? stats.iJobs  ?? 0);
+  const serviceJobs = Math.round(tot.serviceJobs ?? 0);
+  const totalJobs   = cJobs + iJobs + serviceJobs;
+  const balance     = workers - totalJobs;
   const le        = s.laborEfficiency ?? 1.0;
 
   let balanceHtml;
@@ -464,7 +465,7 @@ function _refreshDebug() {
     const n = v => Math.round(v ?? 0);
     const fmt = v => (v ?? 0).toFixed(2);
     if (zoneKey === 'r') {
-      if (factorKey === 'job_availability') return `effectiveJobs ${n(t.effectiveJobs)} / workers ${n(t.workers)} → ${fmt(f.score)}`;
+      if (factorKey === 'job_availability') return `C ${n(t.cJobs)} + I ${n(t.iJobs)} + svc ${n(t.serviceJobs)} = ${n(t.totalJobs)} jobs / ${n(t.workers)} workers → eff. ${fmt(f.score)}`;
       if (factorKey === 'happiness')        return `city ${n(t.cityHappiness)}% → ${fmt(f.score)}`;
     }
     if (zoneKey === 'c') {
@@ -520,6 +521,7 @@ function _refreshDebug() {
     row('Workers',          `${workers}`),
     row('C-jobs',           `${cJobs}`),
     row('I-jobs',           `${iJobs}`),
+    row('Service jobs',     `${serviceJobs}`),
     row('Total jobs',       `${totalJobs}`),
     balanceHtml,
     row('Labor efficiency', `${Math.round(le * 100)}%`),
@@ -566,10 +568,6 @@ function _refreshDebug() {
     rciZoneRows('c', Math.round(s.rciDemand.C)),
     rciZoneRows('i', Math.round(s.rciDemand.I)),
 
-    sect('💵 Finances'),
-    row('Balance',   `€${_fmt(s.money)}`),
-    row('Last net',  `${s.lastMonthNet >= 0 ? '+' : ''}€${_fmt(s.lastMonthNet)}`, s.lastMonthNet >= 0 ? 'dbg-good' : 'dbg-bad'),
-    row('Happiness', `${Math.round(s.happiness)}%`),
   ].join('');
 }
 

@@ -684,7 +684,7 @@ export class City extends EventEmitter {
           floor:         iFloor,
         },
         totals: {
-          workers, shoppers, cJobs, iJobs, totalJobs,
+          workers, shoppers, cJobs, iJobs, serviceJobs: stats.serviceJobs || 0, totalJobs,
           effectiveJobs, cBldg, iBldg, suppliedCBuildings,
           cityHappiness: this._state.happiness,
           workerShortageRatio, laborDemandMultiplier,
