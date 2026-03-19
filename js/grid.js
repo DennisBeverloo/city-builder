@@ -130,7 +130,15 @@ export class Grid {
   }
 
   _restoreColor(tile) {
-    this._setTileColor(tile, this._tileColor(tile));
+    // Road tiles use a shared textured material managed by scene.js.
+    // Restore it directly to avoid overwriting with a plain colour and losing
+    // road markings (scene.js stores the material on tile._roadMat to break
+    // the circular-import that would otherwise be needed).
+    if (tile.type === 'road' && !tile.isBridge && tile._roadMat) {
+      tile.mesh.material = tile._roadMat;
+    } else {
+      this._setTileColor(tile, this._tileColor(tile));
+    }
   }
 
   _removeBuildingMesh(x, z) {
