@@ -707,9 +707,15 @@ export class Grid {
           maxPlotDepth = 4;
           maxPlotWidth = lv < 66 ? 2 : 3;
         } else {
-          // Commercial: start small (single tiles along road), grow with land value
-          maxPlotDepth = lv < 33 ? 1 : lv < 66 ? 2 : 3;
-          maxPlotWidth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+          // Commercial: mix of small (1×1 shop fronts) and larger plots at all land values.
+          // Use a deterministic per-tile hash so variety is stable across ticks.
+          const cHash = (((x * 73856093) ^ (z * 19349663)) >>> 0) % 10;
+          const baseDepth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+          const baseWidth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+          // ~35% chance of a shallow 1-deep shop plot, rest use full base depth
+          maxPlotDepth = cHash < 3 ? 1 : baseDepth;
+          // ~20% chance of a narrow 1-wide strip; rest use full base width
+          maxPlotWidth = cHash === 0 ? 1 : baseWidth;
         }
 
         const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType, maxPlotDepth);
