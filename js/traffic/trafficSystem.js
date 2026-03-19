@@ -163,17 +163,17 @@ export class TrafficSystem {
       }
 
       if (car.state === 'waiting') {
-        const carBlocked  = this._isBlocked(car);
-        const softDist    = this._softStopDist(car);
-        const nearRedStop = softDist < 0.5; // chain-stopped by traffic light ahead
+        const carBlocked = this._isBlocked(car);
+        const ni = car.routeIdx + 1;
+        const atRedLight = ni < car.route.length &&
+          !!this._trafficLights?.isRedFor(car.route[car.routeIdx], car.route[ni]);
 
-        if (!carBlocked && !nearRedStop) {
+        if (!carBlocked && !atRedLight) {
           // Fully clear — resume driving
           car.state = 'driving'; car.waitTimer = 0;
-        } else if (nearRedStop) {
+        } else if (atRedLight) {
           // Held by a red light: reset despawn timer so the car doesn't vanish
-          car.waitTimer = 0;
-          car.speed = 0; continue;
+          car.waitTimer = 0; car.speed = 0; continue;
         } else {
           // Still blocked by another car
           car.waitTimer += dt;
@@ -182,26 +182,37 @@ export class TrafficSystem {
         }
       }
 
-      const carBlocked = this._isBlocked(car);
-      const softDist   = this._softStopDist(car); // tiles to nearest soft-stop point
+      // ── Traffic light / junction hard gate (fires every frame, before movement) ──
+      if (this._trafficLights) {
+        const ni = car.routeIdx + 1;
+        if (ni < car.route.length) {
+          const curTile  = car.route[car.routeIdx];
+          const nxtTile  = car.route[ni];
+          const redLight = this._trafficLights.isRedFor(curTile, nxtTile);
+          const blocked  = !redLight &&
+                this._trafficLights.isJunction(nxtTile.x, nxtTile.z) &&
+                this._isJunctionOccupied(nxtTile, car);
+          if (redLight || blocked) {
+            // Brake hard and clamp position — car must not cross the stop line
+            car.speed = Math.max(0, car.speed - 3.6 * dt / 1000);
+            if (car.progress > 0.85) car.progress = 0.85;
+            this._updateCarTransform(car);
+            continue;
+          }
+        }
+      }
 
+      const carBlocked = this._isBlocked(car);
       if (carBlocked) {
         // Car-to-car block: brake and enter waiting state when fully stopped
         car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
-      } else if (softDist <= 0.02) {
-        // At or past the stop line / junction hold — park here without despawn timer
-        car.speed = 0;
-        this._updateCarTransform(car);
-        continue;
       } else {
-        // Free to move: accelerate and apply distance-based speed cap
+        // Free to move: accelerate and apply destination-approach speed cap
         car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
-        // Combined constraint: red-light / junction box AND route destination
         const destDist = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
-        const stopDist = Math.min(softDist, destDist);
-        if (stopDist < 0.9) {
-          car.speed = Math.min(car.speed, stopDist / 0.9);
+        if (destDist < 0.9) {
+          car.speed = Math.min(car.speed, destDist / 0.9);
         }
       }
 
@@ -550,45 +561,6 @@ export class TrafficSystem {
     if (dirX !== 0 || dirZ !== 0) {
       car.mesh.rotation.y = Math.atan2(-dirZ, dirX);
     }
-  }
-
-  /**
-   * Returns the distance in tiles to the nearest upcoming soft-stop point:
-   *   – a red-light stop line (lookahead 2 tiles ahead)
-   *   – an occupied junction (anti-gridlock "don't block the box")
-   * The distance-based approach deceleration is independent of game speed,
-   * so it works correctly at 1×, 2×, or 4× without any threshold hacks.
-   * Returns Infinity when no stop point is near.
-   */
-  _softStopDist(car) {
-    if (!this._trafficLights) return Infinity;
-    let minDist = Infinity;
-
-    // ── Red lights (look up to 2 tiles ahead) ──────────────────────────────
-    for (let look = 1; look <= 2; look++) {
-      const idx = car.routeIdx + look;
-      if (idx >= car.route.length) break;
-      if (this._trafficLights.isRedFor(car.route[idx - 1], car.route[idx])) {
-        // Stop 0.15 tiles before the junction boundary (at the stop line)
-        const dist = (1.0 - car.progress) + (look - 1) - 0.15;
-        minDist = Math.min(minDist, dist);
-        break;
-      }
-    }
-
-    // ── Anti-gridlock: don't enter a junction that is already occupied ──────
-    const ni = car.routeIdx + 1;
-    if (ni < car.route.length) {
-      const next = car.route[ni];
-      if (this._trafficLights.isJunction(next.x, next.z) &&
-          this._isJunctionOccupied(next, car)) {
-        // Hold 0.15 tiles before the junction box
-        const dist = (1.0 - car.progress) - 0.15;
-        minDist = Math.min(minDist, dist);
-      }
-    }
-
-    return minDist;
   }
 
   /**
