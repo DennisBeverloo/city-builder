@@ -53,11 +53,9 @@ const PERSONAL_VARIANTS = ['sedan','hatchback','pickup','sports'];
 
 // ── Car class ─────────────────────────────────────────────────────────────────
 
-/** Maximum real-milliseconds a car may stay in 'waiting' before despawning.
- *  Must be long enough to survive a full red-phase at max game speed (4×).
- *  Worst case: BASE_GREEN_MS(50000) / 4 + YELLOW_MS(3000) / 4 ≈ 13 750 ms.
- *  We use 30 000 ms to give a safe margin. */
-const MAX_WAIT_MS = 30_000;
+/** Real-milliseconds a car may be blocked by another car before despawning.
+ *  Does NOT apply when waiting at a red light (those cars wait indefinitely). */
+const MAX_WAIT_MS = 7_000;
 
 class Car {
   constructor(mesh, route, type, id) {
@@ -163,46 +161,34 @@ export class TrafficSystem {
       }
 
       if (car.state === 'waiting') {
-        const carBlocked = this._isBlocked(car);
         const ni = car.routeIdx + 1;
         const atRedLight = ni < car.route.length &&
           !!this._trafficLights?.isRedFor(car.route[car.routeIdx], car.route[ni]);
 
-        if (!carBlocked && !atRedLight) {
-          // Fully clear — resume driving
-          car.state = 'driving'; car.waitTimer = 0;
-        } else if (atRedLight) {
-          // Lead car held by red light — never despawn
-          car.waitTimer = 0; car.speed = 0; continue;
-        } else {
-          // Blocked by the car in front — queued in line
-          // If a red junction is anywhere ahead in the next few tiles, reset
-          // the despawn timer so the whole queue survives the red phase.
-          if (this._hasRedLightAhead(car, 6)) car.waitTimer = 0;
-          else car.waitTimer += dt;
+        if (atRedLight) {
+          // Waiting at a red light — hold forever, no despawn
+          car.speed = 0; continue;
+        }
+        if (this._isBlocked(car)) {
+          // Blocked by the car in front — despawn after 7 real seconds
+          car.waitTimer += dt;
           if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
           car.speed = 0; continue;
         }
+        // Nothing blocking — resume
+        car.state = 'driving'; car.waitTimer = 0;
       }
 
-      // ── Traffic light hard gate — only fires for the lead car (no car in front) ──
-      // Cars following another car rely on car-following alone; they don't look at lights.
+      // ── Traffic light gate — lead car only (no car directly in front) ──────
       if (this._trafficLights && !this._isBlocked(car)) {
         const ni = car.routeIdx + 1;
-        if (ni < car.route.length) {
-          const curTile  = car.route[car.routeIdx];
-          const nxtTile  = car.route[ni];
-          const redLight = this._trafficLights.isRedFor(curTile, nxtTile);
-          const blocked  = !redLight &&
-                this._trafficLights.isJunction(nxtTile.x, nxtTile.z) &&
-                this._isJunctionOccupied(nxtTile, car);
-          if (redLight || blocked) {
-            // Brake hard and clamp position — car must not cross the stop line
-            car.speed = Math.max(0, car.speed - 3.6 * dt / 1000);
-            if (car.progress > 0.40) car.progress = 0.40;
-            this._updateCarTransform(car);
-            continue;
-          }
+        if (ni < car.route.length &&
+            this._trafficLights.isRedFor(car.route[car.routeIdx], car.route[ni])) {
+          // Brake and hold at stop line
+          car.speed = Math.max(0, car.speed - 3.6 * dt / 1000);
+          if (car.progress > 0.40) car.progress = 0.40;
+          this._updateCarTransform(car);
+          continue;
         }
       }
 
@@ -225,16 +211,8 @@ export class TrafficSystem {
       car.progress += advance;
 
       while (car.progress >= 1.0 && car.routeIdx < car.route.length - 1) {
-        const curTile  = car.route[car.routeIdx];
-        const nextTile = car.route[car.routeIdx + 1];
-
-        // Hard gate: never advance into a red-light junction
-        if (this._trafficLights?.isRedFor(curTile, nextTile)) {
-          car.progress = 0.40; car.speed = 0; break;
-        }
-        // Hard gate: never advance into an occupied junction (anti-gridlock)
-        if (this._trafficLights?.isJunction(nextTile.x, nextTile.z) &&
-            this._isJunctionOccupied(nextTile, car)) {
+        // Safety net: never advance into a red-light junction
+        if (this._trafficLights?.isRedFor(car.route[car.routeIdx], car.route[car.routeIdx + 1])) {
           car.progress = 0.40; car.speed = 0; break;
         }
 
@@ -567,21 +545,6 @@ export class TrafficSystem {
     }
   }
 
-  /**
-   * Returns true if any other car's world position falls inside the 1×1 tile
-   * bounding box of `junctionTile`.  Used to prevent gridlock.
-   */
-  _isJunctionOccupied(junctionTile, excludeCar) {
-    const cx = junctionTile.x + 0.5;
-    const cz = junctionTile.z + 0.5;
-    for (const other of this._cars) {
-      if (other === excludeCar || other.state === 'parked' || other.state === 'done') continue;
-      if (Math.abs(other.mesh.position.x - cx) < 0.48 &&
-          Math.abs(other.mesh.position.z - cz) < 0.48) return true;
-    }
-    return false;
-  }
-
   _isBlocked(car) {
     if (car.route.length < 2) return false;
     const from = car.route[car.routeIdx];
@@ -610,21 +573,6 @@ export class TrafficSystem {
       const perpZ = dz - dot * dirZ;
       const lateralDist = Math.sqrt(perpX * perpX + perpZ * perpZ);
       if (dot > 0.1 && lateralDist < 0.35) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Returns true if there is a red-light junction within `lookahead` tiles
-   * ahead of this car's current route position.  Used to prevent queued cars
-   * from despawning while waiting behind the lead car at a red light.
-   */
-  _hasRedLightAhead(car, lookahead = 6) {
-    if (!this._trafficLights) return false;
-    for (let i = 1; i <= lookahead; i++) {
-      const idx = car.routeIdx + i;
-      if (idx >= car.route.length) break;
-      if (this._trafficLights.isRedFor(car.route[idx - 1], car.route[idx])) return true;
     }
     return false;
   }

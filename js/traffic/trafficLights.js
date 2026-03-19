@@ -7,11 +7,9 @@ import * as THREE from 'three';
 
 const TILE_H = 0.06;
 
-// ── Timing constants ──────────────────────────────────────────────────────────
-const BASE_GREEN_MS  =  6_000;   // minimum green time (game-ms = real-ms × speedMult)
-const MAX_GREEN_MS   = 12_000;   // maximum green time (keeps phases under MAX_WAIT_MS / speedMult)
-const YELLOW_MS      =  2_000;   // yellow duration (fixed)
-const CARS_PER_SEC_BONUS =  500; // extra ms of green per queued car on approach
+// ── Timing constants (game-ms = real-ms × speedMult) ──────────────────────────
+const GREEN_MS  = 3_000;   // each direction gets exactly 3 game-seconds of green
+const YELLOW_MS = 1_000;   // 1 game-second of yellow between phases
 
 // ── Mesh helpers ──────────────────────────────────────────────────────────────
 
@@ -96,67 +94,31 @@ function createStopLine(axis) {
 // ── Junction ──────────────────────────────────────────────────────────────────
 
 /**
- * Represents a single junction with an actuated 2-phase timer.
+ * Represents a single junction with a simple fixed 2-phase timer.
  * Phases:  0 = Z-axis (N+S) green  →  1 = yellow  →  2 = X-axis (E+W) green  →  3 = yellow
  */
 class Junction {
-  /**
-   * @param {number} x  Junction tile X
-   * @param {number} z  Junction tile Z
-   * @param {Array<{dir,ax,az,pole,stopLine}>} approaches
-   */
   constructor(x, z, approaches) {
     this.x = x;
     this.z = z;
-    this.approaches = approaches;  // which road tiles adjoin this junction
+    this.approaches = approaches;
 
-    // Phase 0 = Z-axis green, 1 = yellow, 2 = X-axis green, 3 = yellow
+    // Stagger startup so nearby junctions don't all flash in sync
     this.phase      = 0;
-    this.phaseTimer = (BASE_GREEN_MS * Math.random()) | 0;  // stagger start
-    this._nextGreenMs = BASE_GREEN_MS;
+    this.phaseTimer = (GREEN_MS * Math.random()) | 0;
   }
 
   /** @param {number} dtMs  Scaled (game-speed) milliseconds */
-  tick(dtMs, cars) {
+  tick(dtMs) {
     this.phaseTimer += dtMs;
-    const dur = (this.phase % 2 === 1) ? YELLOW_MS : this._nextGreenMs;
-
+    const dur = (this.phase % 2 === 1) ? YELLOW_MS : GREEN_MS;
     if (this.phaseTimer >= dur) {
       this.phaseTimer = 0;
       this.phase = (this.phase + 1) % 4;
-
-      // At the start of each green phase, recalculate duration based on demand
-      if (this.phase % 2 === 0) {
-        const axis      = this.phase === 0 ? 'Z' : 'X';
-        const queuedCars = this._countQueuedCars(cars, axis);
-        this._nextGreenMs = Math.min(
-          MAX_GREEN_MS,
-          BASE_GREEN_MS + queuedCars * CARS_PER_SEC_BONUS
-        );
-      }
     }
-
-    // Update pole visuals
     for (const ap of this.approaches) {
       if (ap.pole) setLightSignal(ap.pole, this._signalFor(ap.dir));
     }
-  }
-
-  /** Count cars on approach tiles aligned with the given axis ('X' or 'Z'). */
-  _countQueuedCars(cars, axis) {
-    const approaches = this.approaches.filter(a =>
-      axis === 'Z' ? (a.dir === 'N' || a.dir === 'S') : (a.dir === 'E' || a.dir === 'W')
-    );
-    let count = 0;
-    for (const car of cars) {
-      if (car.state === 'parked' || car.state === 'done') continue;
-      for (const ap of approaches) {
-        const dx = car.mesh.position.x - (ap.ax + 0.5);
-        const dz = car.mesh.position.z - (ap.az + 0.5);
-        if (Math.sqrt(dx * dx + dz * dz) < 2.5) count++;
-      }
-    }
-    return count;
   }
 
   /** Returns 'green' | 'yellow' | 'red' for a given approach direction. */
@@ -299,15 +261,14 @@ export class TrafficLightSystem {
   }
 
   /**
-   * @param {number} dt       Real milliseconds
-   * @param {number} speedMult  Game speed (1 = normal, 4 = fast, 0 = paused)
-   * @param {Array}  cars     Car objects from TrafficSystem
+   * @param {number} dt        Real milliseconds
+   * @param {number} speedMult Game speed multiplier (0 = paused)
    */
-  tick(dt, speedMult, cars) {
+  tick(dt, speedMult) {
     if (speedMult === 0) return;
     const dtGame = dt * speedMult;
     for (const junction of this._junctions.values()) {
-      junction.tick(dtGame, cars);
+      junction.tick(dtGame);
     }
   }
 
