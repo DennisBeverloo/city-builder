@@ -200,8 +200,8 @@ export class TrafficSystem {
         // Combined constraint: red-light / junction box AND route destination
         const destDist = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
         const stopDist = Math.min(softDist, destDist);
-        if (stopDist < 1.5) {
-          car.speed = Math.min(car.speed, Math.max(0.02, stopDist / 1.5));
+        if (stopDist < 0.9) {
+          car.speed = Math.min(car.speed, stopDist / 0.9);
         }
       }
 
@@ -210,6 +210,19 @@ export class TrafficSystem {
       car.progress += advance;
 
       while (car.progress >= 1.0 && car.routeIdx < car.route.length - 1) {
+        const curTile  = car.route[car.routeIdx];
+        const nextTile = car.route[car.routeIdx + 1];
+
+        // Hard gate: never advance into a red-light junction
+        if (this._trafficLights?.isRedFor(curTile, nextTile)) {
+          car.progress = 0.92; car.speed = 0; break;
+        }
+        // Hard gate: never advance into an occupied junction (anti-gridlock)
+        if (this._trafficLights?.isJunction(nextTile.x, nextTile.z) &&
+            this._isJunctionOccupied(nextTile, car)) {
+          car.progress = 0.92; car.speed = 0; break;
+        }
+
         car.progress -= 1.0;
         car.routeIdx++;
         // School bus: check for a planned stop at the new tile
