@@ -161,11 +161,11 @@ export class TrafficSystem {
       const blocked = this._isBlocked(car);
       if (blocked) {
         // Brake smoothly; enter waiting only once fully stopped
-        car.speed = Math.max(0, car.speed - 10.0 * dt / 1000);
+        car.speed = Math.max(0, car.speed - 3.0 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
       } else {
         // Accelerate from rest
-        car.speed = Math.min(1.0, car.speed + 5.0 * dt / 1000);
+        car.speed = Math.min(1.0, car.speed + 1.5 * dt / 1000);
       }
 
       // Advance position at current speed

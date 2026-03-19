@@ -823,7 +823,7 @@ export class City extends EventEmitter {
       if ((def.unlockAtLevel  ?? 1) > level)                          continue;
       if ((def.requires?.power || 0) > 0 && !powerOK)                 continue;
       if ((def.requires?.water || 0) > 0 && !waterOK)                 continue;
-      if (Math.random() > 0.25) continue;
+      if (Math.random() > 0.75) continue;
 
       this._grid.placeBuilding(tile.x, tile.z, buildingId);
       this._initCIBuilding(this._grid.getTile(tile.x, tile.z)?.building);
@@ -1061,14 +1061,19 @@ export class City extends EventEmitter {
     const totalIncome   = rTax + cTax + iTax;
     const totalExpenses = Object.values(groups).reduce((s, g) => s + g.amount, 0);
 
+    const D = 30; // divide monthly figures to get daily
     return {
-      income: { residential: rTax, commercial: cTax, industrial: iTax,
-                total: totalIncome, rCount, cCount, iCount },
-      expenses: groups,
-      totalExpenses,
-      net:      totalIncome - totalExpenses,
+      income: {
+        residential: rTax / D, commercial: cTax / D, industrial: iTax / D,
+        total: totalIncome / D, rCount, cCount, iCount,
+      },
+      expenses: Object.fromEntries(
+        Object.entries(groups).map(([k, g]) => [k, { ...g, amount: g.amount / D }])
+      ),
+      totalExpenses: totalExpenses / D,
+      net:      (totalIncome - totalExpenses) / D,
       balance:  this._state.money,
-      lastMonthNet: this._state.lastMonthNet,
+      lastDayNet: this._state.lastDayNet ?? 0,
     };
   }
 

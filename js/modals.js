@@ -72,25 +72,25 @@ export function showFinancialModal(city) {
     .join('') || `<tr><td colspan="2" class="modal-note">No upkeep costs yet</td></tr>`;
 
   const netCls  = d.net >= 0 ? 'net-positive' : 'net-negative';
-  const lastCls = d.lastMonthNet >= 0 ? 'net-positive' : 'net-negative';
+  const dayCls  = d.lastDayNet >= 0 ? 'net-positive' : 'net-negative';
 
   const html = `
     <section class="modal-section">
-      <h3>Income (per month)</h3>
+      <h3>Income (per day)</h3>
       <table class="modal-table">${incRows}</table>
     </section>
     <section class="modal-section">
-      <h3>Expenses (per month)</h3>
+      <h3>Expenses (per day)</h3>
       <table class="modal-table">${expRows}
         <tr class="total-row"><td class="modal-label">Total expenses</td>
           <td class="modal-value">−${fmt(d.totalExpenses)}</td></tr>
       </table>
     </section>
     <div class="modal-net ${netCls}">
-      Net this month: ${d.net >= 0 ? '+' : ''}${fmt(d.net)}
+      Net per day: ${d.net >= 0 ? '+' : ''}${fmt(d.net)}
     </div>
     <div class="modal-sub">
-      Last month: <span class="${lastCls}">${d.lastMonthNet >= 0 ? '+' : ''}${fmt(d.lastMonthNet)}</span>
+      Yesterday: <span class="${dayCls}">${d.lastDayNet >= 0 ? '+' : ''}${fmt(d.lastDayNet)}</span>
       &nbsp;·&nbsp; Balance: <strong>${fmt(d.balance)}</strong>
     </div>`;
 
