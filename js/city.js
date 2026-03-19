@@ -355,6 +355,7 @@ export class City extends EventEmitter {
           plotDepth:       tile.building.plotDepth  ?? null,
           plotRoadDir:     tile.building.plotRoadDir ?? null,
           plotTiles:       tile.building.plotTiles  ?? null,
+          rotation:        tile.building.rotation   ?? 0,
         } : null,
       }));
 
@@ -463,6 +464,7 @@ export class City extends EventEmitter {
               plotDepth:       saved.building.plotDepth   ?? null,
               plotRoadDir:     saved.building.plotRoadDir ?? null,
               plotTiles:       saved.building.plotTiles   ?? null,
+              rotation:        saved.building.rotation    ?? 0,
             };
           } else {
             tile.building = null;   // unknown building type — treat as empty
@@ -909,7 +911,7 @@ export class City extends EventEmitter {
     return { success: true };
   }
 
-  placeBuilding(x, z, buildingId) {
+  placeBuilding(x, z, buildingId, rotation = 0) {
     const def  = BUILDINGS[buildingId];
     if (!def)  return { success: false, reason: 'Unknown building' };
 
@@ -953,7 +955,7 @@ export class City extends EventEmitter {
     if (this._state.money < def.cost)
       return { success: false, reason: `Not enough money (need €${def.cost})` };
 
-    const ok = this._grid.placeBuilding(x, z, buildingId);
+    const ok = this._grid.placeBuilding(x, z, buildingId, rotation);
     if (!ok) return { success: false, reason: 'Cannot place here' };
 
     this._state.money -= def.cost;

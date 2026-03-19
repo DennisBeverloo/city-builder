@@ -261,8 +261,9 @@ export class Grid {
    * the footprint extends +x (east) and -z (north).
    * All footprint tiles share one building object reference.
    * @param {number} ax @param {number} az @param {string} buildingId
+   * @param {number} [rotation=0]  Y-axis rotation in radians (faces south by default)
    */
-  placeBuilding(ax, az, buildingId) {
+  placeBuilding(ax, az, buildingId, rotation = 0) {
     const def = BUILDINGS[buildingId];
     if (!def) return false;
 
@@ -310,6 +311,7 @@ export class Grid {
     const worldCZ = az - d / 2 + 1;
     const mesh = createBuildingMesh(buildingId, ax + az * 40);
     mesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
+    mesh.rotation.y = rotation;
     mesh.userData.buildingId = buildingId;
     mesh.userData.tileX      = ax;
     mesh.userData.tileZ      = az;
@@ -326,6 +328,7 @@ export class Grid {
                     : (def.zoneType === 'R' ? (def.provides?.capacity || 6) * 0.1 : 0),
       jobs:           def.provides?.jobs || 0,
       level:          1,
+      rotation,
       tileX: ax, tileZ: az,
     };
 

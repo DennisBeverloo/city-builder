@@ -460,6 +460,7 @@ export function rebuildSceneFromGrid(grid) {
       const worldCZ = z - bd / 2 + 1;
       mesh = createBuildingMesh(id, x + z * 40);
       mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
+      mesh.rotation.y = tile.building.rotation || 0;
     }
     mesh.userData.buildingId = id;
     mesh.userData.tileX      = x;

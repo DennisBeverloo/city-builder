@@ -15,7 +15,7 @@ import {
   initSpeedControls, initPauseMenu,
   initHeatmapControls, getActiveHeatmap,
 } from './ui.js';
-import { BUILDINGS } from './buildings.js';
+import { BUILDINGS, createBuildingMesh } from './buildings.js';
 import { initModalTriggers } from './modals.js';
 import { TrafficSystem } from './traffic/trafficSystem.js';
 
@@ -286,6 +286,85 @@ let _rightMouseDownY = 0;
 let _lastHoveredTile = null;
 let _selectedTile    = null;
 
+// ── Ghost mesh (transparent building preview while placing) ───────────────────
+
+let _ghostMesh      = null;   // current transparent preview mesh
+let _ghostBuildingId = null;  // which building the ghost currently shows
+let _ghostRotation  = 0;      // current auto-computed Y rotation
+
+/**
+ * Determine which direction the building should face based on adjacent roads.
+ * Default facing is south (+z). Checks south → north → east → west.
+ * Returns a Y-axis rotation in radians.
+ */
+function _computeBuildingRotation(tile, buildingId) {
+  const def = BUILDINGS[buildingId];
+  if (!def) return 0;
+  const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+
+  // South edge (z + 1): default facing → rotation 0
+  for (let i = 0; i < bw; i++) {
+    if (grid.getTile(tile.x + i, tile.z + 1)?.type === 'road') return 0;
+  }
+  // North edge (z - bd): rotation π
+  for (let i = 0; i < bw; i++) {
+    if (grid.getTile(tile.x + i, tile.z - bd)?.type === 'road') return Math.PI;
+  }
+  // East edge (x + bw): rotation -π/2
+  for (let i = 0; i < bd; i++) {
+    if (grid.getTile(tile.x + bw, tile.z - i)?.type === 'road') return -Math.PI / 2;
+  }
+  // West edge (x - 1): rotation π/2
+  for (let i = 0; i < bd; i++) {
+    if (grid.getTile(tile.x - 1, tile.z - i)?.type === 'road') return Math.PI / 2;
+  }
+  return 0; // no road found — face south by default
+}
+
+function _clearGhostMesh() {
+  if (_ghostMesh) {
+    scene.remove(_ghostMesh);
+    _ghostMesh.traverse(child => {
+      if (child.isMesh) { child.geometry?.dispose(); child.material?.dispose(); }
+    });
+    _ghostMesh = null;
+  }
+  _ghostBuildingId = null;
+  _ghostRotation   = 0;
+}
+
+function _updateGhostMesh(tile, buildingId) {
+  const def = BUILDINGS[buildingId];
+  // Only show ghost for service/infra buildings (not auto-spawned zone types)
+  if (!def || def.zoneType) { _clearGhostMesh(); return; }
+
+  // Recreate mesh only when the building type changes
+  if (_ghostBuildingId !== buildingId) {
+    _clearGhostMesh();
+    const mesh = createBuildingMesh(buildingId, 0);
+    mesh.traverse(child => {
+      if (child.isMesh) {
+        child.material = child.material.clone();
+        child.material.transparent = true;
+        child.material.opacity     = 0.5;
+        child.material.depthWrite  = false;
+      }
+    });
+    scene.add(mesh);
+    _ghostMesh       = mesh;
+    _ghostBuildingId = buildingId;
+  }
+
+  const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+  const worldCX   = tile.x + bw / 2;
+  const worldCZ   = tile.z - bd / 2 + 1;
+  const TILE_H    = 0.06;
+
+  _ghostRotation        = _computeBuildingRotation(tile, buildingId);
+  _ghostMesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
+  _ghostMesh.rotation.y = _ghostRotation;
+}
+
 const canvas = renderer.domElement;
 
 // ── mousedown ─────────────────────────────────────────────────────
@@ -352,20 +431,30 @@ canvas.addEventListener('mousemove', e => {
     hideDragInfo();
   }
 
-  // Footprint hover for multi-tile buildings; regular hover otherwise
+  // Ghost mesh + footprint hover for building tools
   const def = tool?.type === 'building' ? BUILDINGS[tool.buildingId] : null;
-  const [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
-  if (tile && (bw > 1 || bd > 1)) {
-    const footprintTiles = [];
-    for (let dx = 0; dx < bw; dx++) {
-      for (let dz = 0; dz < bd; dz++) {
-        const ft = grid.getTile(tile.x + dx, tile.z - dz);
-        if (ft) footprintTiles.push(ft);
+  if (tool?.type === 'building' && tile) {
+    // Show transparent 3D ghost (auto-rotated to face nearest road)
+    _updateGhostMesh(tile, tool.buildingId);
+
+    // Also tint footprint tiles for placement validity feedback
+    const [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
+    if (bw > 1 || bd > 1) {
+      const footprintTiles = [];
+      for (let dx = 0; dx < bw; dx++) {
+        for (let dz = 0; dz < bd; dz++) {
+          const ft = grid.getTile(tile.x + dx, tile.z - dz);
+          if (ft) footprintTiles.push(ft);
+        }
       }
+      grid.setHover(null);
+      grid.setPreview(footprintTiles, tool);
+    } else {
+      grid.clearPreview();
+      grid.setHover(tile);
     }
-    grid.setHover(null);
-    grid.setPreview(footprintTiles, tool);
   } else {
+    _clearGhostMesh();
     grid.clearPreview();
     grid.setHover(tile);
   }
@@ -378,7 +467,7 @@ canvas.addEventListener('mouseup', e => {
   if (e.button === 2) {
     const dx = e.clientX - _rightMouseDownX;
     const dy = e.clientY - _rightMouseDownY;
-    if (Math.abs(dx) <= 4 && Math.abs(dy) <= 4) resetTool();
+    if (Math.abs(dx) <= 4 && Math.abs(dy) <= 4) { resetTool(); _clearGhostMesh(); }
     return;
   }
   if (e.button !== 0) return;
@@ -405,7 +494,7 @@ canvas.addEventListener('mouseup', e => {
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (!_isDragging) { grid.setHover(null); hideRangeOverlay(); hideDragInfo(); }
+  if (!_isDragging) { grid.setHover(null); hideRangeOverlay(); hideDragInfo(); _clearGhostMesh(); }
 });
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -420,7 +509,7 @@ function _handleTileClick(tile, tool) {
     result = city.placeZone(tile.x, tile.z, tool.zoneType);
 
   } else if (tool.type === 'building') {
-    result = city.placeBuilding(tile.x, tile.z, tool.buildingId);
+    result = city.placeBuilding(tile.x, tile.z, tool.buildingId, _ghostRotation);
     if (result?.success) {
       const def = BUILDINGS[tool.buildingId];
       if (def) {
