@@ -558,21 +558,23 @@ export class TrafficSystem {
       const dx   = other.mesh.position.x - car.mesh.position.x;
       const dz   = other.mesh.position.z - car.mesh.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > 1.2 || dist < 0.01) continue;
+      if (dist > 0.9 || dist < 0.01) continue; // tighter radius — only cars very close ahead
 
-      // Skip cars travelling in the opposite direction (oncoming traffic in other lane)
+      // Skip cars not travelling in roughly the same direction.
+      // dot product <= 0 means opposite or perpendicular — a crossing car should
+      // never block you; only a car ahead in your own lane counts.
       const otherFrom = other.route[other.routeIdx];
       const otherTo   = other.route[Math.min(other.routeIdx + 1, other.route.length - 1)];
       const odX = otherTo.x - otherFrom.x;
       const odZ = otherTo.z - otherFrom.z;
-      if (dirX * odX + dirZ * odZ < 0) continue; // heading opposite — different lane
+      if (dirX * odX + dirZ * odZ <= 0) continue; // opposite or perpendicular — ignore
 
-      // Only block if the other car is ahead AND roughly in our lane (not perpendicular)
-      const dot  = dx * dirX + dz * dirZ;
-      const perpX = dx - dot * dirX;
-      const perpZ = dz - dot * dirZ;
+      // The other car must be clearly ahead (not beside) and in roughly the same lane
+      const dot       = dx * dirX + dz * dirZ;
+      const perpX     = dx - dot * dirX;
+      const perpZ     = dz - dot * dirZ;
       const lateralDist = Math.sqrt(perpX * perpX + perpZ * perpZ);
-      if (dot > 0.1 && lateralDist < 0.35) return true;
+      if (dot > 0.25 && lateralDist < 0.30) return true;
     }
     return false;
   }
