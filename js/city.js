@@ -305,12 +305,10 @@ export class City extends EventEmitter {
     result.breakdown.industrialTax  *= ie;
     result.income = result.breakdown.residentialTax + result.breakdown.commercialTax + result.breakdown.industrialTax;
     result.net = result.income - result.expenses;
-    // Daily fraction
-    const dailyNet = result.net / 30;
+    // Full monthly amount applied every game day
+    const dailyNet = result.net;
     this._state.money += dailyNet;
     this._state.lastDayNet = dailyNet;
-    this._dailyNetAccum = (this._dailyNetAccum || 0) + dailyNet;
-    this._state.lastMonthNet = this._dailyNetAccum * 30; // projected monthly equivalent
   }
 
   // ── Save / Load ───────────────────────────────────────────────────
@@ -1061,17 +1059,12 @@ export class City extends EventEmitter {
     const totalIncome   = rTax + cTax + iTax;
     const totalExpenses = Object.values(groups).reduce((s, g) => s + g.amount, 0);
 
-    const D = 30; // divide monthly figures to get daily
     return {
-      income: {
-        residential: rTax / D, commercial: cTax / D, industrial: iTax / D,
-        total: totalIncome / D, rCount, cCount, iCount,
-      },
-      expenses: Object.fromEntries(
-        Object.entries(groups).map(([k, g]) => [k, { ...g, amount: g.amount / D }])
-      ),
-      totalExpenses: totalExpenses / D,
-      net:      (totalIncome - totalExpenses) / D,
+      income: { residential: rTax, commercial: cTax, industrial: iTax,
+                total: totalIncome, rCount, cCount, iCount },
+      expenses: groups,
+      totalExpenses,
+      net:      totalIncome - totalExpenses,
       balance:  this._state.money,
       lastDayNet: this._state.lastDayNet ?? 0,
     };

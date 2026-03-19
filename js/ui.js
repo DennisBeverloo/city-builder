@@ -68,7 +68,7 @@ function _injectInfraButtons(toolbar) {
     btn.dataset.tool     = 'building';
     btn.dataset.building = id;
     btn.textContent      = `${emoji} ${label}`;
-    const lines = [`${emoji} ${def.name}`, `Cost: €${def.cost} | Upkeep: €${(def.monthlyUpkeep / 30).toFixed(1)}/day`];
+    const lines = [`${emoji} ${def.name}`, `Cost: €${def.cost} | Upkeep: €${def.monthlyUpkeep}/day`];
     if (def.provides?.power_kw)    lines.push(`Provides ${def.provides.power_kw} kW`);
     if (def.provides?.water_units) lines.push(`Provides ${def.provides.water_units} water units`);
     btn.title = lines.join('\n');
@@ -703,14 +703,13 @@ export function showTileInfo(tile) {
     if (def.provides?.jobs) rows.push(['Jobs', def.provides.jobs]);
     rows.push(['🏙️ Level',         b.level]);
     if (def.zoneType === 'R') {
-      const dailyTax = Math.round((b.residents || 0) * 10 / 30);
-      rows.push(['💰 Tax/day',      `€${dailyTax}`]);
+      rows.push(['💰 Tax/day',      `€${Math.round((b.residents || 0) * 10)}`]);
     } else if (def.zoneType === 'C') {
-      rows.push(['💰 Tax/day',      `€${Math.round(50 / 30)}`]);
+      rows.push(['💰 Tax/day',      `€${Math.round(50)}`]);
     } else if (def.zoneType === 'I') {
-      rows.push(['💰 Tax/day',      `€${Math.round(80 * (b.fillPercentage ?? 1.0) / 30)}`]);
+      rows.push(['💰 Tax/day',      `€${Math.round(80 * (b.fillPercentage ?? 1.0))}`]);
     } else {
-      rows.push(['💵 Upkeep/day',   `€${(def.monthlyUpkeep / 30).toFixed(1)}`]);
+      rows.push(['💵 Upkeep/day',   `€${def.monthlyUpkeep}`]);
     }
     rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
     rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
