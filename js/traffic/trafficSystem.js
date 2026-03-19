@@ -162,12 +162,18 @@ export class TrafficSystem {
 
       const blocked = this._isBlocked(car);
       if (blocked) {
-        // Brake at same rate as acceleration for smooth visible slowdown
+        // Brake visibly — same rate as acceleration
         car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
       } else {
-        // Accelerate from rest
+        // Accelerate from rest or cruise
         car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
+        // Slow down when approaching the end of the route
+        const tilesLeft = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
+        if (tilesLeft < 1.5) {
+          const approachSpeed = Math.max(0.05, tilesLeft / 1.5);
+          car.speed = Math.min(car.speed, approachSpeed);
+        }
       }
 
       // Advance position at current speed
@@ -177,6 +183,15 @@ export class TrafficSystem {
       while (car.progress >= 1.0 && car.routeIdx < car.route.length - 1) {
         car.progress -= 1.0;
         car.routeIdx++;
+        // School bus: check for a planned stop at the new tile
+        if (car.type === 'bus' && car._busStopKeys) {
+          const cur = car.route[car.routeIdx];
+          const k   = `${cur.x},${cur.z}`;
+          if (car._busStopKeys.has(k) && !car._visitedStops.has(k)) {
+            car._visitedStops.add(k);
+            car._busStopTimer = 2500 + Math.random() * 2000; // 2.5–4.5 s stop
+          }
+        }
       }
 
       if (car.routeIdx >= car.route.length - 1 && car.progress >= 1.0) {
@@ -186,6 +201,13 @@ export class TrafficSystem {
         // Buses stop longer to pick up / drop off
         car.parkTimer = car._busParkMs ?? (PARK_MS[0] + Math.random() * (PARK_MS[1] - PARK_MS[0]));
         continue;
+      }
+
+      // Bus stop: hold position while timer counts down
+      if (car.type === 'bus' && car._busStopTimer > 0) {
+        car._busStopTimer -= dt;
+        car.speed = Math.max(0, car.speed - 2.5 * dt / 1000);
+        if (car._busStopTimer > 0) { this._updateCarTransform(car); continue; }
       }
 
       this._updateCarTransform(car);
@@ -356,35 +378,54 @@ export class TrafficSystem {
   _spawnBus() {
     const stats = this._grid.getStats();
     const allB  = stats.allBuildings;
-    // Find a school building
     const schools = allB.filter(b => b.id === 'primary_school' || b.id === 'high_school');
     if (!schools.length) return;
     const school = schools[Math.floor(Math.random() * schools.length)];
     const schoolEntrances = findBuildingEntrances(this._grid, school);
     if (!schoolEntrances.length) return;
-    const start = schoolEntrances[Math.floor(Math.random() * schoolEntrances.length)];
+    const schoolStop = schoolEntrances[Math.floor(Math.random() * schoolEntrances.length)];
 
-    // Find a residential building to "serve"
     const residential = allB.filter(b => b.def?.zoneType === 'R');
-    if (!residential.length) return;
-    const dest = residential[Math.floor(Math.random() * residential.length)];
-    const destEntrances = findBuildingEntrances(this._grid, dest);
-    if (!destEntrances.length) return;
-    const end = destEntrances[Math.floor(Math.random() * destEntrances.length)];
+    if (residential.length < 2) return;
 
-    const route = astar(this._graph, start, end);
-    if (!route || route.length < 2) return;
+    // Pick 3–5 distinct R stops
+    const numStops = 3 + Math.floor(Math.random() * 3);
+    const rStops = [];
+    const usedIdx = new Set();
+    for (let attempt = 0; rStops.length < numStops && attempt < numStops * 4; attempt++) {
+      const idx = Math.floor(Math.random() * residential.length);
+      if (usedIdx.has(idx)) continue;
+      usedIdx.add(idx);
+      const ent = findBuildingEntrances(this._grid, residential[idx]);
+      if (ent.length) rStops.push(ent[0]);
+    }
+    if (!rStops.length) return;
+
+    // Build concatenated route: school → r1 → r2 → … → school
+    const fullRoute = [];
+    const stopKeys  = new Set();
+    let from = schoolStop;
+    for (const to of rStops) {
+      const seg = astar(this._graph, from, to);
+      if (!seg || seg.length < 2) continue;
+      const base = fullRoute.length ? seg.slice(1) : seg;
+      fullRoute.push(...base);
+      stopKeys.add(`${to.x},${to.z}`);
+      from = to;
+    }
+    // Return to school
+    const ret = astar(this._graph, from, schoolStop);
+    if (ret && ret.length > 1) fullRoute.push(...ret.slice(1));
+    if (fullRoute.length < 2) return;
 
     const mesh = createSchoolBus();
-    mesh.castShadow    = true;
-    mesh.receiveShadow = false;
+    mesh.castShadow = true;
     this._scene.add(mesh);
 
-    const car = new Car(mesh, route, 'bus', this._nextId++);
-    // Buses drive slower
-    car.speed = 0;
-    // Longer stop at destination (picking up/dropping off kids)
-    car._busParkMs = 4000 + Math.random() * 4000;
+    const car           = new Car(mesh, fullRoute, 'bus', this._nextId++);
+    car._busStopKeys    = stopKeys;   // Set<"x,z"> of planned stop tiles
+    car._busStopTimer   = 0;          // countdown ms remaining at current stop
+    car._visitedStops   = new Set();  // prevent re-stopping at same tile
     this._updateCarTransform(car);
     this._cars.push(car);
   }
@@ -482,7 +523,7 @@ export class TrafficSystem {
       const dx   = other.mesh.position.x - car.mesh.position.x;
       const dz   = other.mesh.position.z - car.mesh.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > 0.55 || dist < 0.01) continue;
+      if (dist > 1.2 || dist < 0.01) continue;
 
       // Skip cars travelling in the opposite direction (oncoming traffic in other lane)
       const otherFrom = other.route[other.routeIdx];
@@ -491,9 +532,12 @@ export class TrafficSystem {
       const odZ = otherTo.z - otherFrom.z;
       if (dirX * odX + dirZ * odZ < 0) continue; // heading opposite — different lane
 
-      // Check if other car is ahead in our direction of travel
-      const dot = dx * dirX + dz * dirZ;
-      if (dot > 0.1) return true;
+      // Only block if the other car is ahead AND roughly in our lane (not perpendicular)
+      const dot  = dx * dirX + dz * dirZ;
+      const perpX = dx - dot * dirX;
+      const perpZ = dz - dot * dirZ;
+      const lateralDist = Math.sqrt(perpX * perpX + perpZ * perpZ);
+      if (dot > 0.1 && lateralDist < 0.35) return true;
     }
     return false;
   }

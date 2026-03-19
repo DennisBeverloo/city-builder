@@ -585,6 +585,29 @@ const PAN_SPEED = 0.25;
 window.addEventListener('keydown', e => _keys.add(e.code));
 window.addEventListener('keyup',   e => _keys.delete(e.code));
 
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+window.addEventListener('keydown', (e) => {
+  // Don't fire when user is typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch (e.key) {
+    case 'b':
+    case 'B': {
+      // Select bulldozer (demolish) tool
+      const demolishBtn = document.querySelector('button[data-tool="demolish"]');
+      if (demolishBtn && !demolishBtn.classList.contains('locked')) {
+        demolishBtn.click();
+      }
+      break;
+    }
+    case ' ':
+      e.preventDefault();
+      city.togglePause();
+      break;
+  }
+});
+
 function _handleKeyPan() {
   let dx = 0, dz = 0;
   if (_keys.has('ArrowLeft')  || _keys.has('KeyA')) dx -= PAN_SPEED;

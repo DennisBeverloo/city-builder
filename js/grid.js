@@ -8,10 +8,11 @@ import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, 
 // Tile floor colours
 const C = {
   empty:    0x5a8a3c,
-  zone_r:   0x5a8a3c,   // same as landscape — R zones blend into terrain
+  zone_r:   0x7dbb5a,   // unoccupied R zone: visible green tint
   zone_c:   0xa8cfe8,   // fainter unoccupied C (was 0x64b5f6)
   zone_i:   0xcbd5dc,   // fainter unoccupied I (was 0xb0bec5)
   pavement: 0xb0b0b0,   // gray pavement for occupied C plots
+  pavement_i: 0x78909c,  // darker blue-grey for occupied I plots
   road:    0x37474f,
   river:   0x1565c0,
   forest:  0x2e7d32,
@@ -119,6 +120,8 @@ export class Grid {
       case 'service':
       case 'infra':
         if (tile.zoneType === 'C' && tile.building) return C.pavement;
+        if (tile.zoneType === 'I' && tile.building) return C.pavement_i;
+        if (tile.zoneType === 'R' && tile.building) return C.empty;   // occupied R: invisible, blend with landscape
         if (tile.zoneType) return { R: C.zone_r, C: C.zone_c, I: C.zone_i }[tile.zoneType] ?? C.empty;
         if (tile.building) return tile.building.def.color;
         return C.empty;
@@ -704,8 +707,8 @@ export class Grid {
           maxPlotDepth = 4;
           maxPlotWidth = lv < 66 ? 2 : 3;
         } else {
-          // Commercial and others: scale with land value
-          maxPlotDepth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+          // Commercial: start small (single tiles along road), grow with land value
+          maxPlotDepth = lv < 33 ? 1 : lv < 66 ? 2 : 3;
           maxPlotWidth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
         }
 

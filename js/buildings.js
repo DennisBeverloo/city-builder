@@ -861,10 +861,39 @@ function _i3Tank(def, rng) {
   return g;
 }
 
-function _createIndustrialMesh(def, rng) {
-  const variants = [_i0Warehouse, _i1Factory, _i2FenceYard, _i3Tank];
-  const idx = Math.floor(rng() * variants.length);
-  return variants[idx](def, rng);
+function _createIndustrialMesh(def, rng, plotW = 1, plotD = 1) {
+  // Level 1 industrial: low flat warehouse filling most of the plot
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const bW = plotW * 0.80;
+  const bD = plotD * 0.80;
+  const bodyH = 0.32;
+
+  const wallMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
+  const roofMat = cachedMat(0x78909c); // flat metal roof
+
+  // Main warehouse body — wide and low
+  addBox(g, bW, bodyH, bD, 0, yBot + bodyH / 2, 0, wallMat);
+
+  // Flat roof slab with slight overhang
+  const overhang = 0.04;
+  addBox(g, bW + overhang, 0.025, bD + overhang, 0, yBot + bodyH + 0.012, 0, roofMat);
+
+  // Roll-up door on south face (road-facing)
+  const doorW = Math.min(bW * 0.45, 0.36);
+  addBox(g, doorW, bodyH * 0.75, 0.012, 0, yBot + bodyH * 0.375, bD / 2 + 0.006, M.garageDark);
+
+  // Small high windows south
+  const winOffX = bW * 0.30;
+  addBox(g, 0.10, 0.07, 0.012, -winOffX, yBot + bodyH * 0.80, bD / 2 + 0.006, M.window);
+  addBox(g, 0.10, 0.07, 0.012,  winOffX, yBot + bodyH * 0.80, bD / 2 + 0.006, M.window);
+
+  // Small vent/chimney detail on roof (NE area)
+  addRoundChimney(g, bW * 0.25, -bD * 0.25, 0.12, yBot + bodyH + 0.025);
+
+  return g;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1435,7 +1464,7 @@ export function createBuildingMesh(buildingId, seed = 0, plotW = 1, plotD = 1) {
 
   if (def.zoneType === 'R') return _createResidentialMesh(def, rng);
   if (def.zoneType === 'C') return _createCommercialMesh(def, rng, plotW, plotD);
-  if (def.zoneType === 'I') return _createIndustrialMesh(def, rng);
+  if (def.zoneType === 'I') return _createIndustrialMesh(def, rng, plotW, plotD);
 
   // Service buildings
   if (buildingId === 'police_station')  return _createPoliceStation(def);
@@ -1651,13 +1680,72 @@ export function createPlotGardenMesh(plot, seed, zoneType) {
 
   // ── I — Industrial ───────────────────────────────────────────────
   if (zoneType === 'I') {
-    // 50% chance of chain-link fence on non-road-facing sides
-    if (rng() < 0.5) {
-      if (roadDir !== 'N') addFenceX(group, minX, maxX + 1, minZ, 0);
-      if (roadDir !== 'S') addFenceX(group, minX, maxX + 1, maxZ + 1, 0);
-      if (roadDir !== 'W') addFenceZ(group, minZ, maxZ + 1, minX, 0);
-      if (roadDir !== 'E') addFenceZ(group, minZ, maxZ + 1, maxX + 1, 0);
+    // Chain link fence on all 3 non-road-facing sides
+    const postMat  = cachedMat(0x546e7a);
+    const railMat2 = cachedMat(0x78909c);
+    const diagMat  = cachedMat(0x78909c);
+
+    // Helper: chain link fence along X at constant Z
+    function chainLinkX(x1, x2, fz) {
+      const len = Math.abs(x2 - x1);
+      const midX = (x1 + x2) / 2;
+      // Two horizontal rails
+      addBox(group, len, 0.014, 0.010, midX, 0.07, fz, railMat2);
+      addBox(group, len, 0.014, 0.010, midX, 0.16, fz, railMat2);
+      // Posts every 0.4 tiles
+      const postCount = Math.max(2, Math.round(len / 0.4));
+      for (let i = 0; i <= postCount; i++) {
+        const px = x1 + (x2 - x1) * (i / postCount);
+        addBox(group, 0.016, 0.20, 0.016, px, 0.10, fz, postMat);
+      }
+      // Diagonal criss-cross between posts
+      const segCount = Math.max(1, Math.round(len / 0.4));
+      for (let i = 0; i < segCount; i++) {
+        const sx = x1 + (x2 - x1) * (i / segCount);
+        const ex = x1 + (x2 - x1) * ((i + 1) / segCount);
+        const segLen = Math.abs(ex - sx);
+        const dMesh1 = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.010, 0.008), diagMat);
+        dMesh1.rotation.z = Math.PI / 4;
+        dMesh1.position.set((sx + ex) / 2, 0.115, fz);
+        group.add(dMesh1);
+        const dMesh2 = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.010, 0.008), diagMat);
+        dMesh2.rotation.z = -Math.PI / 4;
+        dMesh2.position.set((sx + ex) / 2, 0.115, fz);
+        group.add(dMesh2);
+      }
     }
+
+    // Helper: chain link fence along Z at constant X
+    function chainLinkZ(z1, z2, fx) {
+      const len = Math.abs(z2 - z1);
+      const midZ = (z1 + z2) / 2;
+      addBox(group, 0.010, 0.014, len, fx, 0.07, midZ, railMat2);
+      addBox(group, 0.010, 0.014, len, fx, 0.16, midZ, railMat2);
+      const postCount = Math.max(2, Math.round(len / 0.4));
+      for (let i = 0; i <= postCount; i++) {
+        const pz = z1 + (z2 - z1) * (i / postCount);
+        addBox(group, 0.016, 0.20, 0.016, fx, 0.10, pz, postMat);
+      }
+      const segCount = Math.max(1, Math.round(len / 0.4));
+      for (let i = 0; i < segCount; i++) {
+        const sz = z1 + (z2 - z1) * (i / segCount);
+        const ez = z1 + (z2 - z1) * ((i + 1) / segCount);
+        const segLen = Math.abs(ez - sz);
+        const dMesh1 = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.010, segLen), diagMat);
+        dMesh1.rotation.x = Math.PI / 4;
+        dMesh1.position.set(fx, 0.115, (sz + ez) / 2);
+        group.add(dMesh1);
+        const dMesh2 = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.010, segLen), diagMat);
+        dMesh2.rotation.x = -Math.PI / 4;
+        dMesh2.position.set(fx, 0.115, (sz + ez) / 2);
+        group.add(dMesh2);
+      }
+    }
+
+    if (roadDir !== 'N') chainLinkX(minX, maxX + 1, minZ);
+    if (roadDir !== 'S') chainLinkX(minX, maxX + 1, maxZ + 1);
+    if (roadDir !== 'W') chainLinkZ(minZ, maxZ + 1, minX);
+    if (roadDir !== 'E') chainLinkZ(minZ, maxZ + 1, maxX + 1);
 
     // Industrial props scattered across plot
     const area = W * D;
@@ -1672,16 +1760,12 @@ export function createPlotGardenMesh(plot, seed, zoneType) {
 
       const roll = rng();
       if (roll < 0.30) {
-        // Crate
         addBox(group, 0.12, 0.12, 0.12, px, 0.06, pz, M.crate);
       } else if (roll < 0.55) {
-        // Barrel
         addBarrel(group, px, pz, 0);
       } else if (roll < 0.70 && area >= 4) {
-        // Shipping container (large plots only, 0–1 per plot)
         addBox(group, 0.35, 0.22, 0.14, px, 0.11, pz, cachedMat(pick(rng, containerColors)));
       } else {
-        // Pipe (horizontal)
         if (rng() < 0.5) {
           addBox(group, 0.5, 0.04, 0.04, px, 0.12, pz, M.chimneyMetal);
         } else {
