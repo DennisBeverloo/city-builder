@@ -1490,71 +1490,210 @@ export function createPlotGardenMesh(plot, seed, zoneType) {
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minZ = Math.min(...zs), maxZ = Math.max(...zs);
   const W = maxX - minX + 1, D = maxZ - minZ + 1;
-  const cx = minX + W / 2, cz = minZ + D / 2; // world centre
+  const cx = minX + W / 2, cz = minZ + D / 2;
 
-  const fenceT = 0.04;
+  // ── R — Residential ──────────────────────────────────────────────
+  if (zoneType === 'R') {
+    const gapW = 0.4; // entrance gap width
 
-  // Helper: fence segment using existing fence helpers
-  const fenceSgmX = (wx1, wx2, wz) => addFenceX(group, wx1, wx2, wz, 0);
-  const fenceSgmZ = (wz1, wz2, wx) => addFenceZ(group, wz1, wz2, wx, 0);
-
-  const gapW = Math.min(0.5, W * 0.4); // entrance gap width
-
-  // North fence (z = minZ edge)
-  if (roadDir !== 'N') {
-    fenceSgmX(minX, maxX + 1, minZ);
-  } else {
-    const lEnd = cx - gapW / 2;
-    const rStart = cx + gapW / 2;
-    if (lEnd > minX)    fenceSgmX(minX, lEnd, minZ);
-    if (rStart < maxX + 1) fenceSgmX(rStart, maxX + 1, minZ);
-  }
-  // South fence (z = maxZ + 1 edge)
-  if (roadDir !== 'S') {
-    fenceSgmX(minX, maxX + 1, maxZ + 1);
-  } else {
-    const lEnd = cx - gapW / 2;
-    const rStart = cx + gapW / 2;
-    if (lEnd > minX)    fenceSgmX(minX, lEnd, maxZ + 1);
-    if (rStart < maxX + 1) fenceSgmX(rStart, maxX + 1, maxZ + 1);
-  }
-  // West fence (x = minX edge)
-  if (roadDir !== 'W') {
-    fenceSgmZ(minZ, maxZ + 1, minX);
-  }
-  // East fence (x = maxX + 1 edge)
-  if (roadDir !== 'E') {
-    fenceSgmZ(minZ, maxZ + 1, maxX + 1);
-  }
-
-  // Props: trees and bushes scattered inside plot
-  const area = W * D;
-  const propCount = Math.floor(area * 0.8 + rng() * area);
-  for (let i = 0; i < propCount; i++) {
-    const px = minX + 0.3 + rng() * (W - 0.6);
-    const pz = minZ + 0.3 + rng() * (D - 0.6);
-    // Don't overlap the building mesh (rough centre exclusion)
-    const dx = px - cx, dz = pz - cz;
-    if (Math.abs(dx) < 0.4 && Math.abs(dz) < 0.4) continue;
-    if (rng() < 0.4) addTree(group, px, pz, 0);
-    else             addBush(group, px, pz, 0);
-  }
-
-  // For residential plots: a thin path strip from road-facing edge inward
-  if (zoneType === 'R' && area >= 2) {
-    const pathH = 0.01;
-    let pathMesh;
-    if (roadDir === 'N' || roadDir === 'S') {
-      pathMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, pathH, D * 0.6), M.path);
-      const pz2 = roadDir === 'N' ? minZ + D * 0.3 : maxZ + 1 - D * 0.3;
-      pathMesh.position.set(cx, pathH / 2, pz2);
+    // North fence (z = minZ edge)
+    if (roadDir !== 'N') {
+      addFenceX(group, minX, maxX + 1, minZ, 0);
     } else {
-      pathMesh = new THREE.Mesh(new THREE.BoxGeometry(D * 0.6, pathH, 0.15), M.path);
-      const px2 = roadDir === 'W' ? minX + D * 0.3 : maxX + 1 - D * 0.3;
-      pathMesh.position.set(px2, pathH / 2, cz);
+      const lEnd = cx - gapW / 2;
+      const rStart = cx + gapW / 2;
+      if (lEnd > minX)        addFenceX(group, minX, lEnd, minZ, 0);
+      if (rStart < maxX + 1)  addFenceX(group, rStart, maxX + 1, minZ, 0);
     }
-    pathMesh.castShadow = true;
-    group.add(pathMesh);
+    // South fence (z = maxZ + 1 edge)
+    if (roadDir !== 'S') {
+      addFenceX(group, minX, maxX + 1, maxZ + 1, 0);
+    } else {
+      const lEnd = cx - gapW / 2;
+      const rStart = cx + gapW / 2;
+      if (lEnd > minX)        addFenceX(group, minX, lEnd, maxZ + 1, 0);
+      if (rStart < maxX + 1)  addFenceX(group, rStart, maxX + 1, maxZ + 1, 0);
+    }
+    // West fence (x = minX edge)
+    if (roadDir !== 'W') {
+      addFenceZ(group, minZ, maxZ + 1, minX, 0);
+    } else {
+      const lEnd = cz - gapW / 2;
+      const rStart = cz + gapW / 2;
+      if (lEnd > minZ)        addFenceZ(group, minZ, lEnd, minX, 0);
+      if (rStart < maxZ + 1)  addFenceZ(group, rStart, maxZ + 1, minX, 0);
+    }
+    // East fence (x = maxX + 1 edge)
+    if (roadDir !== 'E') {
+      addFenceZ(group, minZ, maxZ + 1, maxX + 1, 0);
+    } else {
+      const lEnd = cz - gapW / 2;
+      const rStart = cz + gapW / 2;
+      if (lEnd > minZ)        addFenceZ(group, minZ, lEnd, maxX + 1, 0);
+      if (rStart < maxZ + 1)  addFenceZ(group, rStart, maxZ + 1, maxX + 1, 0);
+    }
+
+    // Path from road-facing edge to plot centre
+    {
+      const pathH = 0.01;
+      let pathMesh;
+      if (roadDir === 'N') {
+        const pathLen = cz - minZ;
+        pathMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, pathH, pathLen), M.path);
+        pathMesh.position.set(cx, 0.005, minZ + pathLen / 2);
+      } else if (roadDir === 'S') {
+        const pathLen = (maxZ + 1) - cz;
+        pathMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, pathH, pathLen), M.path);
+        pathMesh.position.set(cx, 0.005, cz + pathLen / 2);
+      } else if (roadDir === 'E') {
+        const pathLen = (maxX + 1) - cx;
+        pathMesh = new THREE.Mesh(new THREE.BoxGeometry(pathLen, pathH, 0.12), M.path);
+        pathMesh.position.set(cx + pathLen / 2, 0.005, cz);
+      } else { // W
+        const pathLen = cx - minX;
+        pathMesh = new THREE.Mesh(new THREE.BoxGeometry(pathLen, pathH, 0.12), M.path);
+        pathMesh.position.set(minX + pathLen / 2, 0.005, cz);
+      }
+      pathMesh.castShadow = true;
+      group.add(pathMesh);
+    }
+
+    // Trees and bushes scattered inside plot
+    const area = W * D;
+    const propCount = Math.floor(area * 0.6 + rng() * area * 0.4);
+    // Determine path corridor axis for exclusion
+    const pathIsNS = (roadDir === 'N' || roadDir === 'S');
+    for (let i = 0; i < propCount; i++) {
+      const px = minX + 0.3 + rng() * (W - 0.6);
+      const pz = minZ + 0.3 + rng() * (D - 0.6);
+      const dx = px - cx, dz = pz - cz;
+      // Exclude building centre
+      if (Math.abs(dx) < 0.45 && Math.abs(dz) < 0.45) continue;
+      // Exclude path corridor
+      if (pathIsNS && Math.abs(px - cx) < 0.10) continue;
+      if (!pathIsNS && Math.abs(pz - cz) < 0.10) continue;
+      if (rng() < 0.4) addTree(group, px, pz, 0);
+      else             addBush(group, px, pz, 0);
+    }
+
+    return group;
+  }
+
+  // ── C — Commercial ───────────────────────────────────────────────
+  if (zoneType === 'C') {
+    // Parking lot on road-facing half of the plot
+    let parkMinX, parkMaxX, parkMinZ, parkMaxZ;
+    if (roadDir === 'N') {
+      parkMinX = minX; parkMaxX = maxX + 1;
+      parkMinZ = minZ; parkMaxZ = minZ + D / 2;
+    } else if (roadDir === 'S') {
+      parkMinX = minX; parkMaxX = maxX + 1;
+      parkMinZ = maxZ + 1 - D / 2; parkMaxZ = maxZ + 1;
+    } else if (roadDir === 'E') {
+      parkMinX = maxX + 1 - W / 2; parkMaxX = maxX + 1;
+      parkMinZ = minZ; parkMaxZ = maxZ + 1;
+    } else { // W
+      parkMinX = minX; parkMaxX = minX + W / 2;
+      parkMinZ = minZ; parkMaxZ = maxZ + 1;
+    }
+
+    const parkW = parkMaxX - parkMinX;
+    const parkD = parkMaxZ - parkMinZ;
+    const parkCX = (parkMinX + parkMaxX) / 2;
+    const parkCZ = (parkMinZ + parkMaxZ) / 2;
+
+    // Grey asphalt slab
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(parkW, 0.008, parkD), M.asphalt);
+    slab.position.set(parkCX, 0.004, parkCZ);
+    slab.castShadow = true;
+    group.add(slab);
+
+    // White parking stripes
+    const stripeCount = 3 + Math.floor(rng() * 3); // 3–5
+    if (roadDir === 'N' || roadDir === 'S') {
+      // Stripes run parallel to x-axis (thin in z, spanning in x)
+      for (let s = 0; s < stripeCount; s++) {
+        const t = (s + 1) / (stripeCount + 1);
+        const sz = parkMinZ + t * parkD;
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(parkW, 0.01, 0.008), M.stripe);
+        stripe.position.set(parkCX, 0.006, sz);
+        stripe.castShadow = true;
+        group.add(stripe);
+      }
+    } else {
+      // E/W: stripes run parallel to z-axis
+      for (let s = 0; s < stripeCount; s++) {
+        const t = (s + 1) / (stripeCount + 1);
+        const sx = parkMinX + t * parkW;
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.01, parkD), M.stripe);
+        stripe.position.set(sx, 0.006, parkCZ);
+        stripe.castShadow = true;
+        group.add(stripe);
+      }
+    }
+
+    // 1–2 small planters near building entrance (opposite road side from parking)
+    const planterCount = 1 + Math.floor(rng() * 2);
+    for (let p = 0; p < planterCount; p++) {
+      let px, pz;
+      const offset = (p === 0 ? -0.3 : 0.3);
+      if (roadDir === 'N') {
+        px = cx + offset; pz = maxZ + 0.6;
+      } else if (roadDir === 'S') {
+        px = cx + offset; pz = minZ + 0.4;
+      } else if (roadDir === 'E') {
+        px = minX + 0.4; pz = cz + offset;
+      } else { // W
+        px = maxX + 0.6; pz = cz + offset;
+      }
+      addBush(group, px, pz, 0);
+    }
+
+    return group;
+  }
+
+  // ── I — Industrial ───────────────────────────────────────────────
+  if (zoneType === 'I') {
+    // 50% chance of chain-link fence on non-road-facing sides
+    if (rng() < 0.5) {
+      if (roadDir !== 'N') addFenceX(group, minX, maxX + 1, minZ, 0);
+      if (roadDir !== 'S') addFenceX(group, minX, maxX + 1, maxZ + 1, 0);
+      if (roadDir !== 'W') addFenceZ(group, minZ, maxZ + 1, minX, 0);
+      if (roadDir !== 'E') addFenceZ(group, minZ, maxZ + 1, maxX + 1, 0);
+    }
+
+    // Industrial props scattered across plot
+    const area = W * D;
+    const propCount = 3 + Math.floor(rng() * 4);
+    const containerColors = [0xc62828, 0x1565c0, 0x37474f, 0x4e342e];
+
+    for (let i = 0; i < propCount; i++) {
+      const px = minX + 0.25 + rng() * (W - 0.5);
+      const pz = minZ + 0.25 + rng() * (D - 0.5);
+      const dx = px - cx, dz = pz - cz;
+      if (Math.abs(dx) < 0.45 && Math.abs(dz) < 0.45) continue;
+
+      const roll = rng();
+      if (roll < 0.30) {
+        // Crate
+        addBox(group, 0.12, 0.12, 0.12, px, 0.06, pz, M.crate);
+      } else if (roll < 0.55) {
+        // Barrel
+        addBarrel(group, px, pz, 0);
+      } else if (roll < 0.70 && area >= 4) {
+        // Shipping container (large plots only, 0–1 per plot)
+        addBox(group, 0.35, 0.22, 0.14, px, 0.11, pz, cachedMat(pick(rng, containerColors)));
+      } else {
+        // Pipe (horizontal)
+        if (rng() < 0.5) {
+          addBox(group, 0.5, 0.04, 0.04, px, 0.12, pz, M.chimneyMetal);
+        } else {
+          addBox(group, 0.04, 0.04, 0.5, px, 0.12, pz, M.chimneyMetal);
+        }
+      }
+    }
+
+    return group;
   }
 
   return group;

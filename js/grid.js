@@ -662,12 +662,24 @@ export class Grid {
         const tile = this._tiles[z][x];
         if (tile.type !== 'zone' || tile.building) continue;
 
-        // Find which side has a road (prefer N > S > E > W)
+        // Find which side has a road — prefer the direction with the longest adjacent road segment
         let roadDir = null;
+        let roadDirLen = -1;
         for (const dir of ['N', 'S', 'E', 'W']) {
-          const { rdx, rdz } = DIRS[dir];
+          const { rdx, rdz, wdx, wdz } = DIRS[dir];
           const nb = this.getTile(x + rdx, z + rdz);
-          if (nb?.type === 'road') { roadDir = dir; break; }
+          if (nb?.type !== 'road') continue;
+          // Count consecutive road tiles in both width directions from this position
+          let len = 1;
+          for (let w = 1; w < this.size; w++) {
+            if (this.getTile(x + rdx + wdx * w, z + rdz + wdz * w)?.type !== 'road') break;
+            len++;
+          }
+          for (let w = 1; w < this.size; w++) {
+            if (this.getTile(x + rdx - wdx * w, z + rdz - wdz * w)?.type !== 'road') break;
+            len++;
+          }
+          if (len > roadDirLen) { roadDir = dir; roadDirLen = len; }
         }
         if (!roadDir) continue;
 
@@ -733,6 +745,9 @@ export class Grid {
 
     // Build the main building mesh centred on the plot
     const mesh = createBuildingMesh(buildingId, seed);
+    const ROAD_DIR_ROTATION = { N: Math.PI, S: 0, E: -Math.PI / 2, W: Math.PI / 2 };
+    const plotRotation = ROAD_DIR_ROTATION[plot.roadDir] ?? 0;
+    mesh.rotation.y = plotRotation;
     mesh.position.set(plot.worldCX, TILE_H / 2 + def.height / 2, plot.worldCZ);
     mesh.userData.buildingId = buildingId;
     mesh.userData.tileX = plot.anchorX;
@@ -766,6 +781,7 @@ export class Grid {
       residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) : 0,
       jobs: def.provides?.jobs || 0,
       level: 1,
+      rotation: plotRotation,
       tileX: plot.anchorX, tileZ: plot.anchorZ,
       plotWidth: plot.width, plotDepth: plot.depth,
       plotRoadDir: plot.roadDir,
