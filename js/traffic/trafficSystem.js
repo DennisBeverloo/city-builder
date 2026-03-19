@@ -195,7 +195,7 @@ export class TrafficSystem {
           if (redLight || blocked) {
             // Brake hard and clamp position — car must not cross the stop line
             car.speed = Math.max(0, car.speed - 3.6 * dt / 1000);
-            if (car.progress > 0.85) car.progress = 0.85;
+            if (car.progress > 0.40) car.progress = 0.40;
             this._updateCarTransform(car);
             continue;
           }
@@ -226,12 +226,12 @@ export class TrafficSystem {
 
         // Hard gate: never advance into a red-light junction
         if (this._trafficLights?.isRedFor(curTile, nextTile)) {
-          car.progress = 0.92; car.speed = 0; break;
+          car.progress = 0.40; car.speed = 0; break;
         }
         // Hard gate: never advance into an occupied junction (anti-gridlock)
         if (this._trafficLights?.isJunction(nextTile.x, nextTile.z) &&
             this._isJunctionOccupied(nextTile, car)) {
-          car.progress = 0.92; car.speed = 0; break;
+          car.progress = 0.40; car.speed = 0; break;
         }
 
         car.progress -= 1.0;
