@@ -409,7 +409,8 @@ function _deriveFloorColor(tile) {
     case 'zone':
     case 'service':
     case 'infra':
-      if (tile.zoneType) return { R: 0x81c784, C: 0x64b5f6, I: 0xb0bec5 }[tile.zoneType] ?? 0x5a8a3c;
+      if (tile.zoneType === 'C' && tile.building) return 0xb0b0b0;
+      if (tile.zoneType) return { R: 0xb8d8b5, C: 0xa8cfe8, I: 0xcbd5dc }[tile.zoneType] ?? 0x5a8a3c;
       if (tile.building) return tile.building.def.color;
       return 0x5a8a3c;
     default:
@@ -452,7 +453,9 @@ export function rebuildSceneFromGrid(grid) {
       const xs = plotTiles.map(t => t.x), zs = plotTiles.map(t => t.z);
       const worldCX = (Math.min(...xs) + Math.max(...xs) + 1) / 2;
       const worldCZ = (Math.min(...zs) + Math.max(...zs) + 1) / 2;
-      mesh = createBuildingMesh(id, x + z * grid.size);
+      const _pw = tile.building.plotWidth  ?? 1;
+      const _pd = tile.building.plotDepth  ?? 1;
+      mesh = createBuildingMesh(id, x + z * grid.size, _pw, _pd);
       mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
     } else {
       const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];

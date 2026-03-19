@@ -485,6 +485,7 @@ function _r1Modern(def, rng) {
 }
 
 /** Variant 2 — L-shaped bungalow */
+/** Variant 2 — Pronounced L-shaped bungalow */
 function _r2LShape(def, rng) {
   const g    = new THREE.Group();
   const h    = def.height;
@@ -492,25 +493,26 @@ function _r2LShape(def, rng) {
 
   const wallMat1 = cachedMat(pick(rng, WALL_COLORS));
   const wallMat2 = cachedMat(pick(rng, WALL_COLORS));
-  const roofMat  = cachedMat(0x607d8b);
+  const roofMat  = cachedMat(pick(rng, ROOF_COLORS));
   const doorMat  = cachedMat(pick(rng, DOOR_COLORS));
 
-  // Main body (wide)
-  addBox(g, 0.72, 0.38, 0.46, -0.10, yBot + 0.19, -0.12, wallMat1);
-  // Wing body (deep)
-  addBox(g, 0.36, 0.34, 0.54,  0.22, yBot + 0.17,  0.10, wallMat2);
-  // Flat roofs
-  addBox(g, 0.74, 0.04, 0.48, -0.10, yBot + 0.40, -0.12, roofMat);
-  addBox(g, 0.38, 0.04, 0.56,  0.22, yBot + 0.37,  0.10, roofMat);
-  // Door on south face of main body
-  addBox(g, 0.10, 0.16, 0.012, -0.10, yBot + 0.12, 0.12, doorMat);
-  // Windows — main body south
-  addBox(g, 0.12, 0.10, 0.012, -0.32, yBot + 0.26, 0.12, M.window);
-  addBox(g, 0.12, 0.10, 0.012,  0.10, yBot + 0.26, 0.12, M.window);
-  // Wing east face
-  addBox(g, 0.012, 0.10, 0.12, 0.40, yBot + 0.24, 0.05, M.window);
-  // Path
-  addPath(g, 0.12, 0.46, 0.12, yBot);
+  // Main body — long horizontal arm (wide, shallow)
+  addBox(g, 0.78, 0.38, 0.38, 0, yBot + 0.19, -0.14, wallMat1);
+  // Wing — perpendicular shorter arm (narrow, deep), meeting the right of main body
+  addBox(g, 0.34, 0.34, 0.52, 0.22, yBot + 0.17, 0.12, wallMat2);
+  // Flat roof on main arm
+  addBox(g, 0.80, 0.04, 0.40, 0, yBot + 0.40, -0.14, roofMat);
+  // Lower flat roof on wing
+  addBox(g, 0.36, 0.04, 0.54, 0.22, yBot + 0.37, 0.12, roofMat);
+  // Door on south face of wing (faces the road)
+  addBox(g, 0.10, 0.18, 0.012, 0.22, yBot + 0.12, 0.39, doorMat);
+  // Windows — main arm south face
+  addBox(g, 0.15, 0.12, 0.012, -0.28, yBot + 0.26, 0.05, M.window);
+  addBox(g, 0.15, 0.12, 0.012, -0.02, yBot + 0.26, 0.05, M.window);
+  // Main arm east end
+  addBox(g, 0.012, 0.12, 0.14, 0.39, yBot + 0.26, -0.14, M.window);
+  // Path to wing door
+  addPath(g, 0.39, 0.46, 0.10, yBot);
   return g;
 }
 
@@ -569,8 +571,40 @@ function _r4Ranch(def, rng) {
   return g;
 }
 
+/** Variant 5 — Wide rectangular ranch (horizontal emphasis) */
+function _r5Rect(def, rng) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const wallMat = cachedMat(pick(rng, WALL_COLORS));
+  const roofMat = cachedMat(pick(rng, ROOF_COLORS));
+  const doorMat = cachedMat(pick(rng, DOOR_COLORS));
+  const trimMat = cachedMat(pick(rng, [0x78909c, 0x546e7a, 0x37474f, 0x4e342e]));
+
+  // Wide, clearly rectangular body (much wider than deep)
+  addBox(g, 0.84, 0.36, 0.50, 0, yBot + 0.18, 0, wallMat);
+  // Low hip-style roof (flat + sloped ends, approximated with 3 boxes)
+  addBox(g, 0.84, 0.04, 0.52, 0, yBot + 0.38, 0, roofMat);
+  addBox(g, 0.76, 0.08, 0.52, 0, yBot + 0.42, 0, roofMat);
+  // Trim strip along bottom edge (south)
+  addBox(g, 0.86, 0.04, 0.016, 0, yBot + 0.04, 0.26, trimMat);
+  // 3 windows evenly spaced on south face
+  const wPositions = [-0.28, 0, 0.28];
+  for (const wx of wPositions) {
+    addBox(g, 0.14, 0.12, 0.012, wx, yBot + 0.26, 0.251, M.window);
+  }
+  // Central door
+  addBox(g, 0.10, 0.20, 0.012, 0, yBot + 0.13, 0.252, doorMat);
+  // East face window
+  addBox(g, 0.012, 0.12, 0.18, 0.42, yBot + 0.26, 0, M.window);
+  // Path
+  addPath(g, 0.25, 0.46, 0.12, yBot);
+  return g;
+}
+
 function _createResidentialMesh(def, rng) {
-  const variants = [_r0Cottage, _r1Modern, _r2LShape, _r3Tall, _r4Ranch];
+  const variants = [_r0Cottage, _r1Modern, _r2LShape, _r3Tall, _r4Ranch, _r5Rect];
   const idx = Math.floor(rng() * variants.length);
   return variants[idx](def, rng);
 }
@@ -582,8 +616,8 @@ function _createResidentialMesh(def, rng) {
 const COMMERCIAL_WALL   = [0xfff8e1, 0xe3f2fd, 0xeceff1, 0xfbe9e7, 0xf3e5f5, 0xfafafa];
 const AWNING_COLORS     = [0xc62828, 0x1565c0, 0x2e7d32, 0xe65100, 0x6a1b9a, 0x00695c];
 
-/** Variant 0 — Single story shop with awning */
-function _c0Shop(def, rng) {
+/** Single-story shop with awning. bW/bD are the building footprint in world units. */
+function _c0Shop(def, rng, bW, bD) {
   const g    = new THREE.Group();
   const h    = def.height;
   const yBot = -h / 2;
@@ -592,98 +626,28 @@ function _c0Shop(def, rng) {
   const awningCol = pick(rng, AWNING_COLORS);
   const awningMat = cachedMat(awningCol);
   const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
+  const bodyH = 0.40;
 
   // Body
-  addBox(g, 0.78, 0.68, 0.76, 0, yBot + 0.34, 0, wallMat);
-  // Flat roof
-  addBox(g, 0.80, 0.04, 0.78, 0, yBot + 0.70, 0, cachedMat(0x9e9e9e));
-  // Sign band (south)
-  addBox(g, 0.78, 0.12, 0.015, 0, yBot + 0.56, 0.388, awningMat);
+  addBox(g, bW, bodyH, bD, 0, yBot + bodyH / 2, 0, wallMat);
+  // Flat roof slab
+  addBox(g, bW + 0.04, 0.03, bD + 0.04, 0, yBot + bodyH + 0.015, 0, cachedMat(0x9e9e9e));
+  // Sign band (south face)
+  addBox(g, bW, 0.10, 0.015, 0, yBot + bodyH - 0.06, bD / 2 + 0.008, awningMat);
   // Shop window (south)
-  addBox(g, 0.52, 0.28, 0.012, 0, yBot + 0.28, 0.397, M.windowShop);
-  // Door (south, offset)
-  addBox(g, 0.11, 0.22, 0.012, 0.27, yBot + 0.13, 0.397, doorMat);
+  addBox(g, bW * 0.55, 0.20, 0.012, 0, yBot + bodyH * 0.45, bD / 2 + 0.007, M.windowShop);
+  // Door south (offset right)
+  addBox(g, 0.10, 0.22, 0.012, bW * 0.28, yBot + bodyH * 0.30, bD / 2 + 0.007, doorMat);
   // Awning slab
-  addBox(g, 0.60, 0.04, 0.14, 0, yBot + 0.52, 0.460, awningMat);
-  // East windows
-  addBox(g, 0.012, 0.16, 0.18, 0.39, yBot + 0.36, -0.15, M.window);
-  addBox(g, 0.012, 0.16, 0.18, 0.39, yBot + 0.36,  0.15, M.window);
-  // Path
-  addPath(g, 0.38, 0.48, 0.14, yBot);
+  addBox(g, bW * 0.65, 0.04, 0.14, 0, yBot + bodyH - 0.08, bD / 2 + 0.08, awningMat);
+  // East windows (2 small)
+  addBox(g, 0.012, 0.14, 0.13, bW / 2 + 0.006, yBot + bodyH * 0.55, -bD * 0.15, M.window);
+  addBox(g, 0.012, 0.14, 0.13, bW / 2 + 0.006, yBot + bodyH * 0.55,  bD * 0.15, M.window);
   return g;
 }
 
-/** Variant 1 — Two-story building */
-function _c1TwoStory(def, rng) {
-  const g    = new THREE.Group();
-  const h    = def.height;
-  const yBot = -h / 2;
-
-  const wallCol1  = pick(rng, COMMERCIAL_WALL);
-  // slightly darker upper floor
-  const wallMat1  = cachedMat(wallCol1);
-  const wallMat2  = cachedMat(0xbdbdbd);
-  const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
-  const parapetMat = cachedMat(0x78909c);
-
-  // Ground floor
-  addBox(g, 0.78, 0.55, 0.78, 0, yBot + 0.275, 0, wallMat1);
-  // Upper floor
-  addBox(g, 0.72, 0.52, 0.72, 0, yBot + 0.55 + 0.26, 0, wallMat2);
-  // Roof parapet
-  const rY = yBot + 1.09;
-  addBox(g, 0.72, 0.06, 0.04, 0,      rY, 0.34,  parapetMat);
-  addBox(g, 0.72, 0.06, 0.04, 0,      rY, -0.34, parapetMat);
-  addBox(g, 0.04, 0.06, 0.72, 0.34,  rY, 0,     parapetMat);
-  addBox(g, 0.04, 0.06, 0.72, -0.34, rY, 0,     parapetMat);
-  // Ground floor south: large window + door
-  addBox(g, 0.52, 0.24, 0.012, -0.06, yBot + 0.24, 0.39, M.windowShop);
-  addBox(g, 0.12, 0.26, 0.012,  0.30, yBot + 0.17, 0.39, doorMat);
-  // Upper floor south: 3 windows
-  addBox(g, 0.14, 0.18, 0.012, -0.24, yBot + 0.81, 0.36, M.window);
-  addBox(g, 0.14, 0.18, 0.012,  0.00, yBot + 0.81, 0.36, M.window);
-  addBox(g, 0.14, 0.18, 0.012,  0.24, yBot + 0.81, 0.36, M.window);
-  // East face: ground + upper windows
-  addBox(g, 0.012, 0.20, 0.22, 0.39, yBot + 0.28, -0.05, M.window);
-  addBox(g, 0.012, 0.18, 0.20, 0.36, yBot + 0.80,  0.00, M.window);
-  // Path
-  addPath(g, 0.39, 0.50, 0.14, yBot);
-  return g;
-}
-
-/** Variant 2 — Wide shop with parking */
-function _c2Parking(def, rng) {
-  const g    = new THREE.Group();
-  const h    = def.height;
-  const yBot = -h / 2;
-
-  const wallMat   = cachedMat(pick(rng, COMMERCIAL_WALL));
-  const awningMat = cachedMat(pick(rng, AWNING_COLORS));
-  const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
-
-  // Body
-  addBox(g, 0.82, 0.62, 0.68, 0, yBot + 0.31, 0, wallMat);
-  // Flat roof
-  addBox(g, 0.84, 0.04, 0.70, 0, yBot + 0.64, 0, cachedMat(0x9e9e9e));
-  // Parking slab in front (south)
-  addBox(g, 0.82, 0.005, 0.30, 0, yBot + 0.003, 0.49, M.asphalt);
-  // Parking stripes
-  addBox(g, 0.010, 0.006, 0.22, -0.20, yBot + 0.006, 0.49, M.stripe);
-  addBox(g, 0.010, 0.006, 0.22,  0.20, yBot + 0.006, 0.49, M.stripe);
-  // Shop window south
-  addBox(g, 0.60, 0.26, 0.012, 0, yBot + 0.30, 0.34, M.windowShop);
-  // Door south
-  addBox(g, 0.11, 0.24, 0.012, 0.30, yBot + 0.15, 0.34, doorMat);
-  // Sign strip south
-  addBox(g, 0.82, 0.10, 0.015, 0, yBot + 0.52, 0.348, awningMat);
-  // East windows
-  addBox(g, 0.012, 0.18, 0.20, 0.41, yBot + 0.36, -0.10, M.window);
-  addBox(g, 0.012, 0.18, 0.20, 0.41, yBot + 0.36,  0.10, M.window);
-  return g;
-}
-
-/** Variant 3 — Corner-style with full-width canopy */
-function _c3Corner(def, rng) {
+/** Corner store / deli style, wide canopy on two sides */
+function _c1Corner(def, rng, bW, bD) {
   const g    = new THREE.Group();
   const h    = def.height;
   const yBot = -h / 2;
@@ -691,30 +655,82 @@ function _c3Corner(def, rng) {
   const wallMat   = cachedMat(pick(rng, COMMERCIAL_WALL));
   const canopyMat = cachedMat(pick(rng, AWNING_COLORS));
   const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
+  const bodyH = 0.38;
 
-  // Body
-  addBox(g, 0.80, 0.64, 0.80, 0, yBot + 0.32, 0, wallMat);
-  // Flat roof
-  addBox(g, 0.82, 0.04, 0.82, 0, yBot + 0.66, 0, cachedMat(0x9e9e9e));
+  addBox(g, bW, bodyH, bD, 0, yBot + bodyH / 2, 0, wallMat);
+  addBox(g, bW + 0.04, 0.03, bD + 0.04, 0, yBot + bodyH + 0.015, 0, cachedMat(0x9e9e9e));
   // South canopy
-  addBox(g, 0.84, 0.06, 0.18, 0, yBot + 0.56, 0.49, canopyMat);
+  addBox(g, bW + 0.06, 0.05, 0.16, 0, yBot + bodyH - 0.04, bD / 2 + 0.10, canopyMat);
   // East canopy
-  addBox(g, 0.18, 0.06, 0.84, 0.49, yBot + 0.56, 0, canopyMat);
+  addBox(g, 0.16, 0.05, bD + 0.06, bW / 2 + 0.10, yBot + bodyH - 0.04, 0, canopyMat);
   // Large south window
-  addBox(g, 0.54, 0.30, 0.012, -0.05, yBot + 0.30, 0.40, M.windowShop);
-  // Door south (offset)
-  addBox(g, 0.12, 0.26, 0.012,  0.28, yBot + 0.17, 0.40, doorMat);
-  // Large east window
-  addBox(g, 0.012, 0.30, 0.54, 0.40, yBot + 0.30, -0.05, M.windowShop);
-  // Path
-  addPath(g, 0.40, 0.50, 0.14, yBot);
+  addBox(g, bW * 0.55, 0.22, 0.012, -bW * 0.08, yBot + bodyH * 0.50, bD / 2 + 0.007, M.windowShop);
+  // Door
+  addBox(g, 0.10, 0.24, 0.012, bW * 0.30, yBot + bodyH * 0.32, bD / 2 + 0.007, doorMat);
+  // East window
+  addBox(g, 0.012, 0.20, bD * 0.40, bW / 2 + 0.007, yBot + bodyH * 0.52, 0, M.windowShop);
   return g;
 }
 
-function _createCommercialMesh(def, rng) {
-  const variants = [_c0Shop, _c1TwoStory, _c2Parking, _c3Corner];
+/** Boutique / café: narrower footprint, gable or low pitched roof */
+function _c2Boutique(def, rng, bW, bD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const wallMat   = cachedMat(pick(rng, COMMERCIAL_WALL));
+  const roofMat   = cachedMat(pick(rng, [0x795548, 0x37474f, 0x455a64, 0x4e342e]));
+  const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
+  const bodyH = 0.36;
+  const roofH = 0.18;
+
+  // Body — slightly narrower in depth (boutique feel)
+  addBox(g, bW * 0.85, bodyH, bD * 0.80, 0, yBot + bodyH / 2, 0, wallMat);
+  // Gable roof
+  _gableRoof(g, bW * 0.87, bD * 0.82 + 0.04, roofH, yBot + bodyH, roofMat);
+  // South windows x2
+  addBox(g, bW * 0.25, 0.16, 0.012, -bW * 0.20, yBot + bodyH * 0.55, bD * 0.41 + 0.007, M.windowShop);
+  addBox(g, bW * 0.25, 0.16, 0.012,  bW * 0.10, yBot + bodyH * 0.55, bD * 0.41 + 0.007, M.windowShop);
+  // Door
+  addBox(g, 0.09, 0.22, 0.012, bW * 0.32, yBot + bodyH * 0.32, bD * 0.41 + 0.007, doorMat);
+  return g;
+}
+
+/** Wide retail: horizontally spread, low flat-roofed box with long window strip */
+function _c3WideRetail(def, rng, bW, bD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const wallMat   = cachedMat(pick(rng, COMMERCIAL_WALL));
+  const accentMat = cachedMat(pick(rng, AWNING_COLORS));
+  const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
+  const bodyH = 0.35;
+
+  // Wide shallow body
+  addBox(g, bW * 1.05, bodyH, bD * 0.72, 0, yBot + bodyH / 2, 0, wallMat);
+  // Flat roof
+  addBox(g, bW * 1.07, 0.03, bD * 0.74, 0, yBot + bodyH + 0.015, 0, cachedMat(0x9e9e9e));
+  // Full-width sign strip on south
+  addBox(g, bW * 1.05, 0.10, 0.016, 0, yBot + bodyH - 0.06, bD * 0.37 + 0.008, accentMat);
+  // Long horizontal shop window
+  addBox(g, bW * 0.75, 0.18, 0.012, 0, yBot + bodyH * 0.42, bD * 0.37 + 0.007, M.windowShop);
+  // Door (far side)
+  addBox(g, 0.10, 0.22, 0.012, bW * 0.38, yBot + bodyH * 0.32, bD * 0.37 + 0.007, doorMat);
+  // Parapet accent
+  const pY = yBot + bodyH + 0.03;
+  addBox(g, bW * 1.07, 0.05, 0.04, 0,         pY, bD * 0.37 + 0.03, accentMat);
+  addBox(g, 0.04, 0.05, bD * 0.74, bW * 0.535, pY, 0,               accentMat);
+  return g;
+}
+
+function _createCommercialMesh(def, rng, plotW = 1, plotD = 1) {
+  // Scale building footprint to ~60% of plot dimensions (min 0.55 for single-tile plots)
+  const bW = Math.max(0.55, plotW * 0.60);
+  const bD = Math.max(0.55, plotD * 0.60);
+  const variants = [_c0Shop, _c1Corner, _c2Boutique, _c3WideRetail];
   const idx = Math.floor(rng() * variants.length);
-  return variants[idx](def, rng);
+  return variants[idx](def, rng, bW, bD);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1411,14 +1427,14 @@ export function createBridgeMesh() {
  * @param {number} [seed=0]  Seed for seeded random variants
  * @returns {THREE.Object3D}
  */
-export function createBuildingMesh(buildingId, seed = 0) {
+export function createBuildingMesh(buildingId, seed = 0, plotW = 1, plotD = 1) {
   const def = BUILDINGS[buildingId];
   if (!def) throw new Error(`Unknown building id: ${buildingId}`);
 
   const rng = mkRand(seed);
 
   if (def.zoneType === 'R') return _createResidentialMesh(def, rng);
-  if (def.zoneType === 'C') return _createCommercialMesh(def, rng);
+  if (def.zoneType === 'C') return _createCommercialMesh(def, rng, plotW, plotD);
   if (def.zoneType === 'I') return _createIndustrialMesh(def, rng);
 
   // Service buildings
@@ -1581,72 +1597,53 @@ export function createPlotGardenMesh(plot, seed, zoneType) {
 
   // ── C — Commercial ───────────────────────────────────────────────
   if (zoneType === 'C') {
-    // Parking lot on road-facing half of the plot
-    let parkMinX, parkMaxX, parkMinZ, parkMaxZ;
-    if (roadDir === 'N') {
-      parkMinX = minX; parkMaxX = maxX + 1;
-      parkMinZ = minZ; parkMaxZ = minZ + D / 2;
-    } else if (roadDir === 'S') {
-      parkMinX = minX; parkMaxX = maxX + 1;
-      parkMinZ = maxZ + 1 - D / 2; parkMaxZ = maxZ + 1;
-    } else if (roadDir === 'E') {
-      parkMinX = maxX + 1 - W / 2; parkMaxX = maxX + 1;
-      parkMinZ = minZ; parkMaxZ = maxZ + 1;
-    } else { // W
-      parkMinX = minX; parkMaxX = minX + W / 2;
-      parkMinZ = minZ; parkMaxZ = maxZ + 1;
-    }
+    const yBase = 0;
 
-    const parkW = parkMaxX - parkMinX;
-    const parkD = parkMaxZ - parkMinZ;
-    const parkCX = (parkMinX + parkMaxX) / 2;
-    const parkCZ = (parkMinZ + parkMaxZ) / 2;
+    // Hedge bushes along plot perimeter (all sides except the road-facing one)
+    // Place bushes spaced ~0.35 apart along each edge
+    const edgeOffset = 0.18; // how far from the tile edge each bush sits
 
-    // Grey asphalt slab
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(parkW, 0.008, parkD), M.asphalt);
-    slab.position.set(parkCX, 0.004, parkCZ);
-    slab.castShadow = true;
-    group.add(slab);
-
-    // White parking stripes
-    const stripeCount = 3 + Math.floor(rng() * 3); // 3–5
-    if (roadDir === 'N' || roadDir === 'S') {
-      // Stripes run parallel to x-axis (thin in z, spanning in x)
-      for (let s = 0; s < stripeCount; s++) {
-        const t = (s + 1) / (stripeCount + 1);
-        const sz = parkMinZ + t * parkD;
-        const stripe = new THREE.Mesh(new THREE.BoxGeometry(parkW, 0.01, 0.008), M.stripe);
-        stripe.position.set(parkCX, 0.006, sz);
-        stripe.castShadow = true;
-        group.add(stripe);
+    // Helper: place a row of bushes along X at fixed Z
+    function bushRowX(zPos, xMin, xMax) {
+      const len = xMax - xMin;
+      const count = Math.max(1, Math.round(len / 0.38));
+      for (let i = 0; i < count; i++) {
+        const t = (i + 0.5) / count;
+        addBush(group, xMin + t * len, zPos, yBase);
       }
-    } else {
-      // E/W: stripes run parallel to z-axis
-      for (let s = 0; s < stripeCount; s++) {
-        const t = (s + 1) / (stripeCount + 1);
-        const sx = parkMinX + t * parkW;
-        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.01, parkD), M.stripe);
-        stripe.position.set(sx, 0.006, parkCZ);
-        stripe.castShadow = true;
-        group.add(stripe);
+    }
+    // Helper: place a row of bushes along Z at fixed X
+    function bushRowZ(xPos, zMin, zMax) {
+      const len = zMax - zMin;
+      const count = Math.max(1, Math.round(len / 0.38));
+      for (let i = 0; i < count; i++) {
+        const t = (i + 0.5) / count;
+        addBush(group, xPos, zMin + t * len, yBase);
       }
     }
 
-    // 1–2 small planters near building entrance (opposite road side from parking)
-    const planterCount = 1 + Math.floor(rng() * 2);
-    for (let p = 0; p < planterCount; p++) {
-      let px, pz;
-      const offset = (p === 0 ? -0.3 : 0.3);
+    // Draw hedges on non-road-facing sides (leave road side open)
+    if (roadDir !== 'N') bushRowX(minZ + edgeOffset, minX + edgeOffset, maxX + 1 - edgeOffset);
+    if (roadDir !== 'S') bushRowX(maxZ + 1 - edgeOffset, minX + edgeOffset, maxX + 1 - edgeOffset);
+    if (roadDir !== 'W') bushRowZ(minX + edgeOffset, minZ + edgeOffset, maxZ + 1 - edgeOffset);
+    if (roadDir !== 'E') bushRowZ(maxX + 1 - edgeOffset, minZ + edgeOffset, maxZ + 1 - edgeOffset);
+
+    // A couple of accent bushes near the entrance corners
+    if (rng() < 0.7) {
+      const gap = 0.28;
       if (roadDir === 'N') {
-        px = cx + offset; pz = maxZ + 0.6;
+        addBush(group, cx - gap, minZ + edgeOffset, yBase);
+        addBush(group, cx + gap, minZ + edgeOffset, yBase);
       } else if (roadDir === 'S') {
-        px = cx + offset; pz = minZ + 0.4;
+        addBush(group, cx - gap, maxZ + 1 - edgeOffset, yBase);
+        addBush(group, cx + gap, maxZ + 1 - edgeOffset, yBase);
       } else if (roadDir === 'E') {
-        px = minX + 0.4; pz = cz + offset;
-      } else { // W
-        px = maxX + 0.6; pz = cz + offset;
+        addBush(group, maxX + 1 - edgeOffset, cz - gap, yBase);
+        addBush(group, maxX + 1 - edgeOffset, cz + gap, yBase);
+      } else {
+        addBush(group, minX + edgeOffset, cz - gap, yBase);
+        addBush(group, minX + edgeOffset, cz + gap, yBase);
       }
-      addBush(group, px, pz, 0);
     }
 
     return group;

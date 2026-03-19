@@ -7,10 +7,11 @@ import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, 
 
 // Tile floor colours
 const C = {
-  empty:   0x5a8a3c,
-  zone_r:  0x81c784,
-  zone_c:  0x64b5f6,
-  zone_i:  0xb0bec5,
+  empty:    0x5a8a3c,
+  zone_r:   0xb8d8b5,   // fainter unoccupied R (was 0x81c784)
+  zone_c:   0xa8cfe8,   // fainter unoccupied C (was 0x64b5f6)
+  zone_i:   0xcbd5dc,   // fainter unoccupied I (was 0xb0bec5)
+  pavement: 0xb0b0b0,   // gray pavement for occupied C plots
   road:    0x37474f,
   river:   0x1565c0,
   forest:  0x2e7d32,
@@ -117,6 +118,7 @@ export class Grid {
       case 'zone':
       case 'service':
       case 'infra':
+        if (tile.zoneType === 'C' && tile.building) return C.pavement;
         if (tile.zoneType) return { R: C.zone_r, C: C.zone_c, I: C.zone_i }[tile.zoneType] ?? C.empty;
         if (tile.building) return tile.building.def.color;
         return C.empty;
@@ -752,7 +754,7 @@ export class Grid {
     const seed = plot.anchorX + plot.anchorZ * this.size;
 
     // Build the main building mesh centred on the plot
-    const mesh = createBuildingMesh(buildingId, seed);
+    const mesh = createBuildingMesh(buildingId, seed, plot.width, plot.depth);
     const ROAD_DIR_ROTATION = { N: Math.PI, S: 0, E: -Math.PI / 2, W: Math.PI / 2 };
     const plotRotation = ROAD_DIR_ROTATION[plot.roadDir] ?? 0;
     mesh.rotation.y = plotRotation;

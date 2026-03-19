@@ -598,7 +598,7 @@ let _lastTime = 0;
 const _fpsEl = document.createElement('div');
 _fpsEl.id = 'fps-counter';
 Object.assign(_fpsEl.style, {
-  position: 'fixed', bottom: '8px', right: '8px',
+  position: 'fixed', top: '8px', right: '8px',
   background: 'rgba(0,0,0,0.45)', color: '#fff',
   font: '11px/1.4 monospace', padding: '2px 7px',
   borderRadius: '4px', pointerEvents: 'none', zIndex: '9999',
