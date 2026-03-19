@@ -357,7 +357,8 @@ export function initHUD(city) {
   const refresh = (state) => _renderHUD(state, city);
   city.on('monthProcessed', refresh);
   city.on('stateChanged',   refresh);
-  city.on('dayTick', (state) => _renderDate(state));
+  city.on('dayTick',  (state) => _renderDate(state));
+  city.on('hourTick', (state) => _renderDate(state));
 
   // New-game hint: shown once, 3 seconds after start
   setTimeout(() => showNotification(
@@ -458,7 +459,9 @@ function _updateRCIMinBadge(wrapperId, demand, scores) {
 
 function _renderDate(state) {
   const { day, month, year } = state.date;
-  _setText('stat-date', `📅 Y${year} M${month} D${day}`);
+  const hour = state.gameHour ?? 0;
+  const hh   = String(hour).padStart(2, '0');
+  _setText('stat-date', `📅 Y${year} M${month} D${day} ${hh}:00`);
 }
 
 function _setText(id, text) {
@@ -782,9 +785,9 @@ export function initSpeedControls(city) {
   group.className = 'speed-group';
   group.innerHTML = `
     <button data-speed="paused" title="⏸ Pause">⏸</button>
-    <button data-speed="normal" title="▶ Normal speed">▶</button>
-    <button data-speed="fast"   title="▶▶ Fast (3×)">▶▶</button>
-    <button data-speed="faster" title="▶▶▶ Fastest (5×)">▶▶▶</button>
+    <button data-speed="normal" title="▶ 1× — Watch traffic (1s = 1 hr)">1×</button>
+    <button data-speed="fast"   title="▶▶ 4× — Fast">4×</button>
+    <button data-speed="faster" title="▶▶▶ 12× — Fastest">12×</button>
   `;
 
   // Insert just before the RCI bars so it sits at the right end of the bar.
@@ -865,6 +868,22 @@ export function initPauseMenu(city) {
     city.resetGame();
     _forceHidePauseMenu();
   });
+
+  // Traffic side toggle
+  const trafficBtn = document.getElementById('btn-traffic-side');
+  if (trafficBtn) {
+    const saved = localStorage.getItem('traffic_leftHand') === 'true';
+    trafficBtn.textContent = saved ? '🇬🇧 Drive left' : '🇺🇸 Drive right';
+    if (window._trafficSystem) window._trafficSystem.setHandedness(saved);
+
+    trafficBtn.addEventListener('click', () => {
+      const currentlyLeft = localStorage.getItem('traffic_leftHand') === 'true';
+      const newLeft = !currentlyLeft;
+      localStorage.setItem('traffic_leftHand', String(newLeft));
+      trafficBtn.textContent = newLeft ? '🇬🇧 Drive left' : '🇺🇸 Drive right';
+      if (window._trafficSystem) window._trafficSystem.setHandedness(newLeft);
+    });
+  }
 
   // Click on backdrop closes menu.
   document.getElementById('pause-overlay')?.addEventListener('click', e => {

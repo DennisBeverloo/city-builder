@@ -17,6 +17,7 @@ import {
 } from './ui.js';
 import { BUILDINGS } from './buildings.js';
 import { initModalTriggers } from './modals.js';
+import { TrafficSystem } from './traffic/trafficSystem.js';
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,16 @@ initSpeedControls(city);
 initPauseMenu(city);
 
 city.on('laborStateChanged', applyLaborStateColors);
+
+// ── Traffic system ───────────────────────────────────────────────────────────
+
+const trafficSystem = new TrafficSystem();
+trafficSystem.init(scene, grid);
+
+// Expose for settings
+window._trafficSystem = trafficSystem;
+
+city.on('stateChanged', () => trafficSystem.rebuild());
 
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +78,7 @@ city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   rebuildSceneFromGrid(grid);
   updateRoadMarkings(grid);
   _refreshHeatmap();
+  trafficSystem.clear(); trafficSystem.rebuild();
 });
 
 city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
@@ -81,6 +93,7 @@ city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
   rebuildSceneFromGrid(grid);
   updateRoadMarkings(grid);
   _refreshHeatmap();
+  trafficSystem.clear(); trafficSystem.rebuild();
 });
 
 city.emit('stateChanged', city.getState());
@@ -481,6 +494,7 @@ function animate(ts) {
   _lastTime = ts;
   _handleKeyPan();
   city.tick(dt);
+  trafficSystem.tick(dt, city.getGameHour(), city.getSpeedMultiplier(), city.getState());
   render();
 }
 

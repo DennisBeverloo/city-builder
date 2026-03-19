@@ -24,12 +24,12 @@ export class EventEmitter {
 
 // ── Speed presets ────────────────────────────────────────────────────────────
 
-/** Milliseconds per game day for each speed preset (0 = paused). */
+/** Milliseconds per game hour for each speed preset (0 = paused). */
 export const SPEED_PRESETS = {
   paused: 0,
-  normal: 1000,   // 1 real second per game day  (~30 s/month)
-  fast:    333,   // 3× speed                    (~10 s/month)
-  faster:  200,   // 5× speed                    (~6 s/month)
+  normal: 1000,   // 1× — 1s/hr, 24s/day, watch traffic
+  fast:    250,   // 4× — 6s/day
+  faster:   83,   // 12× — ~2s/day (≈ old normal feel)
 };
 
 // CAPACITY PLANNING REFERENCE
@@ -94,6 +94,8 @@ function _makeInitialState() {
     gameSpeed:    'normal',
     isPaused:     false,
     prePauseSpeed: 'normal',
+    // Time of day
+    gameHour:     0,
   };
 }
 
@@ -107,8 +109,9 @@ export class City extends EventEmitter {
     this._state = _makeInitialState();
     this._rciBreakdown = null;
     this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
-    this._dayTimer = 0;
-    this._dayMs    = SPEED_PRESETS.normal;
+    this._hourTimer = 0;
+    this._hourMs    = SPEED_PRESETS.normal;
+    this._dailyNetAccum = 0;
   }
 
   // ── Public getters ───────────────────────────────────────────────
@@ -116,6 +119,13 @@ export class City extends EventEmitter {
   getState()        { return { ...this._state }; }
   getDebugStats()   { return this._grid.getStats(); }
   getRCIBreakdown() { return this._rciBreakdown; }
+  getGameHour()     { return this._state.gameHour; }
+
+  getSpeedMultiplier() {
+    if (this._state.isPaused) return 0;
+    const msPerHour = this._hourMs;
+    return msPerHour > 0 ? 1000 / msPerHour : 0; // 1× = 1.0, 4× = 4.0, etc.
+  }
 
   // ── Game speed control ───────────────────────────────────────────
 
@@ -130,8 +140,8 @@ export class City extends EventEmitter {
       this._state.isPaused = true;
     } else {
       this._state.isPaused = false;
-      this._dayMs    = SPEED_PRESETS[preset];
-      this._dayTimer = 0;  // avoid time-debt jump on unpause
+      this._hourMs    = SPEED_PRESETS[preset];
+      this._hourTimer = 0;  // avoid time-debt jump on unpause
     }
     this.emit('speedChanged', this.getState());
   }
@@ -160,11 +170,19 @@ export class City extends EventEmitter {
   /** @param {number} dt milliseconds */
   tick(dt) {
     if (this._state.isPaused) return;
-    this._dayTimer += dt;
-    if (this._dayTimer >= this._dayMs) {
-      this._dayTimer -= this._dayMs;
+    this._hourTimer += dt;
+    if (this._hourTimer >= this._hourMs) {
+      this._hourTimer -= this._hourMs;
+      this._advanceHour();
+    }
+  }
+
+  _advanceHour() {
+    this._state.gameHour = (this._state.gameHour + 1) % 24;
+    if (this._state.gameHour === 0) {
       this._advanceDay();
     }
+    this.emit('hourTick', this.getState());
   }
 
   _advanceDay() {
@@ -182,6 +200,9 @@ export class City extends EventEmitter {
       const { power, water } = this._calcPowerWater(stats.allBuildings);
       this._updateSimulation(stats, power, water);
     }
+
+    // Daily economy tick every day
+    this._dailyEconTick();
 
     if (isMonthEnd) {
       d.day = 1;
@@ -233,40 +254,8 @@ export class City extends EventEmitter {
   _advanceMonth() {
     this._updateLaborStates();
 
-    const stats  = this._grid.getStats();
-    const result = processMonth(stats.allBuildings, SIMULATION_CONFIG);
-
-    const CFG  = SIMULATION_CONFIG;
-    const allB = stats.allBuildings;
-    const totC = allB.filter(b => b.def?.zoneType === 'C').length;
-    const totI = allB.filter(b => b.def?.zoneType === 'I').length;
-    const supC = Math.min(totC, totI * CFG.cSupplyRatio);
-    const supR = totC > 0 ? supC / totC : 1.0;
-    const cTM  = CFG.cUndersupplyEfficiency + (1 - CFG.cUndersupplyEfficiency) * supR;
-    for (const b of allB) {
-      if (b.laborState !== 'abandoned') continue;
-      if (b.def?.zoneType === 'C') result.breakdown.commercialTax -= 50 * cTM;
-      if (b.def?.zoneType === 'I') result.breakdown.industrialTax -= 80 * (b.fillPercentage ?? 1.0);
-    }
-    result.breakdown.commercialTax = Math.max(0, result.breakdown.commercialTax);
-    result.breakdown.industrialTax = Math.max(0, result.breakdown.industrialTax);
-
-    const le = this._state.laborEfficiency ?? 1.0;
-    result.breakdown.commercialTax *= le;
-    result.breakdown.industrialTax *= le;
-
-    const ie = this._state.infraEfficiency ?? 1.0;
-    result.breakdown.residentialTax *= ie;
-    result.breakdown.commercialTax  *= ie;
-    result.breakdown.industrialTax  *= ie;
-
-    result.income = result.breakdown.residentialTax
-                  + result.breakdown.commercialTax
-                  + result.breakdown.industrialTax;
-    result.net    = result.income - result.expenses;
-
-    this._state.money        += result.net;
-    this._state.lastMonthNet  = result.net;
+    // Reset daily accumulator for new month
+    this._dailyNetAccum = 0;
 
     this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
 
@@ -278,8 +267,44 @@ export class City extends EventEmitter {
     const _as = this.saveGame('autosave');
     if (!_as.success) console.warn('Autosave failed:', _as.error);
 
-    this.emit('monthProcessed', { ...this.getState(), monthResult: result });
+    this.emit('monthProcessed', { ...this.getState() });
     this.emit('dayTick', this.getState());
+  }
+
+  _dailyEconTick() {
+    // Run the same economic calculation as _advanceMonth but divide by 30
+    const stats = this._grid.getStats();
+    const result = processMonth(stats.allBuildings, SIMULATION_CONFIG);
+    // Apply same efficiency multipliers as _advanceMonth
+    const le = this._state.laborEfficiency ?? 1.0;
+    const ie = this._state.infraEfficiency ?? 1.0;
+    // Apply abandoned building deductions (same logic as _advanceMonth)
+    const CFG = SIMULATION_CONFIG;
+    const allB = stats.allBuildings;
+    const totC = allB.filter(b => b.def?.zoneType === 'C').length;
+    const totI = allB.filter(b => b.def?.zoneType === 'I').length;
+    const supC = Math.min(totC, totI * CFG.cSupplyRatio);
+    const supR = totC > 0 ? supC / totC : 1.0;
+    const cTM  = CFG.cUndersupplyEfficiency + (1 - CFG.cUndersupplyEfficiency) * supR;
+    for (const b of allB) {
+      if (b.laborState !== 'abandoned') continue;
+      if (b.def?.zoneType === 'C') result.breakdown.commercialTax  -= 50 * cTM;
+      if (b.def?.zoneType === 'I') result.breakdown.industrialTax  -= 80 * (b.fillPercentage ?? 1.0);
+    }
+    result.breakdown.commercialTax = Math.max(0, result.breakdown.commercialTax);
+    result.breakdown.industrialTax = Math.max(0, result.breakdown.industrialTax);
+    result.breakdown.commercialTax *= le;
+    result.breakdown.industrialTax *= le;
+    result.breakdown.residentialTax *= ie;
+    result.breakdown.commercialTax  *= ie;
+    result.breakdown.industrialTax  *= ie;
+    result.income = result.breakdown.residentialTax + result.breakdown.commercialTax + result.breakdown.industrialTax;
+    result.net = result.income - result.expenses;
+    // Daily fraction
+    const dailyNet = result.net / 30;
+    this._state.money += dailyNet;
+    this._dailyNetAccum = (this._dailyNetAccum || 0) + dailyNet;
+    this._state.lastMonthNet = this._dailyNetAccum * 30; // projected monthly equivalent
   }
 
   // ── Save / Load ───────────────────────────────────────────────────
@@ -371,10 +396,11 @@ export class City extends EventEmitter {
       this._state.isPaused = false;
       const resumeSpeed = (snap.gameSpeed && snap.gameSpeed !== 'paused') ? snap.gameSpeed : 'normal';
       this._state.gameSpeed = resumeSpeed;
-      this._dayMs    = SPEED_PRESETS[resumeSpeed] ?? SPEED_PRESETS.normal;
-      this._dayTimer = 0;
+      this._hourMs    = SPEED_PRESETS[resumeSpeed] ?? SPEED_PRESETS.normal;
+      this._hourTimer = 0;
       this._rciBreakdown = snap.rciResult?.breakdown ?? null;
       this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
+      this._dailyNetAccum = 0;
 
       // Restore grid tiles (direct mutation — tile objects are mutable references)
       for (const saved of save.grid) {
@@ -491,8 +517,9 @@ export class City extends EventEmitter {
     this._state = _makeInitialState();
     this._rciBreakdown = null;
     this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
-    this._dayTimer = 0;
-    this._dayMs    = SPEED_PRESETS.normal;
+    this._hourTimer = 0;
+    this._hourMs    = SPEED_PRESETS.normal;
+    this._dailyNetAccum = 0;
 
     // Reset all tile data (keep tile.mesh — the Three.js floor plane)
     for (const tile of this._grid.getAllTiles()) {

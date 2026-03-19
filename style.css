@@ -777,6 +777,51 @@ html, body {
 }
 
 
+/* ── Pause menu settings section ── */
+.pause-section {
+  padding: 8px 0 4px;
+}
+
+.pause-section h3 {
+  font-size: 12px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.setting-row span {
+  flex: 1;
+}
+
+.setting-toggle {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid #333;
+  background: #1e1e3a;
+  color: #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.setting-toggle:hover {
+  background: #2a2a50;
+  border-color: #555;
+  color: #fff;
+}
+
 /* ── Cost toast ── */
 .cost-toast {
   position: fixed;
