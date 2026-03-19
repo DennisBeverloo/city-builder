@@ -276,6 +276,78 @@ export function createPoliceCar() {
 }
 
 /**
+ * School bus — yellow, wider and longer than a car, with rounded cab.
+ */
+export function createSchoolBus() {
+  const group = new THREE.Group();
+  const bL = 0.46, bW = 0.16, bH = 0.075;
+  const bodyY = 0.044 + bH / 2;
+
+  // Main body — bright yellow
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffc200, metalness: 0.2, roughness: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bL, bH, bW), bodyMat);
+  body.position.y = bodyY;
+  group.add(body);
+
+  // Cabin (front, slightly narrower, same colour)
+  const cabL = 0.12, cabW = bW * 0.88, cabH = 0.064;
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(cabL, cabH, cabW), bodyMat);
+  cab.position.set(bL * 0.5 - cabL * 0.5 - 0.01, bodyY + bH / 2 + cabH / 2 - 0.004, 0);
+  group.add(cab);
+
+  // Black stripe along the side
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(bL + 0.002, 0.018, bW + 0.002), stripeMat);
+  stripe.position.set(0, bodyY + bH * 0.20, 0);
+  group.add(stripe);
+
+  // Windows: 3 along the body sides (on +Z and -Z faces — but we'll do top boxes)
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x88bbee, roughness: 0.3, transparent: true, opacity: 0.7 });
+  for (let i = -1; i <= 1; i++) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.032, 0.006), winMat);
+    win.position.set(i * 0.09, bodyY + bH * 0.45, bW / 2 + 0.002);
+    group.add(win);
+    const win2 = win.clone();
+    win2.position.z = -bW / 2 - 0.002;
+    group.add(win2);
+  }
+
+  // 6 wheels (3 axles)
+  const wheelGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.030, 8);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  for (const [sx, sz] of [
+    [bL * 0.36, bW * 0.5 + 0.006], [bL * 0.36, -(bW * 0.5 + 0.006)],
+    [0,          bW * 0.5 + 0.006], [0,         -(bW * 0.5 + 0.006)],
+    [-bL * 0.36, bW * 0.5 + 0.006],[-bL * 0.36,-(bW * 0.5 + 0.006)],
+  ]) {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(sx, 0.025, sz);
+    group.add(w);
+  }
+
+  // Headlights and taillights
+  const headGeo = new THREE.BoxGeometry(0.018, 0.018, 0.028);
+  const headMats = [], tailMats = [];
+  for (const sz of [0.05, -0.05]) {
+    const hMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0 });
+    const h = new THREE.Mesh(headGeo, hMat);
+    h.position.set(bL * 0.5 + 0.009, bodyY + bH * 0.4, sz);
+    group.add(h);
+    headMats.push(hMat);
+    const tMat = new THREE.MeshStandardMaterial({ color: 0xff1100, emissive: 0xff1100, emissiveIntensity: 0 });
+    const t = new THREE.Mesh(headGeo, tMat);
+    t.position.set(-bL * 0.5 - 0.009, bodyY + bH * 0.4, sz);
+    group.add(t);
+    tailMats.push(tMat);
+  }
+  group.userData.headlights = headMats;
+  group.userData.taillights = tailMats;
+
+  return group;
+}
+
+/**
  * Set headlight/taillight emissive intensity based on time of day.
  * @param {THREE.Group} carGroup
  * @param {boolean} isNight

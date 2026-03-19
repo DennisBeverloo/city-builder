@@ -410,7 +410,7 @@ function _deriveFloorColor(tile) {
     case 'service':
     case 'infra':
       if (tile.zoneType === 'C' && tile.building) return 0xb0b0b0;
-      if (tile.zoneType) return { R: 0xb8d8b5, C: 0xa8cfe8, I: 0xcbd5dc }[tile.zoneType] ?? 0x5a8a3c;
+      if (tile.zoneType) return { R: 0x5a8a3c, C: 0xa8cfe8, I: 0xcbd5dc }[tile.zoneType] ?? 0x5a8a3c;
       if (tile.building) return tile.building.def.color;
       return 0x5a8a3c;
     default:

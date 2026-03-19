@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { buildRoadGraph, astar, findBuildingEntrances } from './roadGraph.js';
 import {
   createSedan, createHatchback, createPickup, createSports,
-  createTruck, createPoliceCar,
+  createTruck, createPoliceCar, createSchoolBus,
   updateCarLights, updatePoliceBar, randomCarColor,
 } from './carModels.js';
 
@@ -87,7 +87,8 @@ export class TrafficSystem {
     this._cars       = [];
     this._nextId     = 0;
     this._leftHand   = false; // false = right-hand traffic (default)
-    this._spawnAccum = 0;     // accumulates fractional spawn debt
+    this._spawnAccum  = 0;     // accumulates fractional spawn debt
+    this._busAccum    = 0;     // school bus spawn accumulator
   }
 
   /**
@@ -136,6 +137,7 @@ export class TrafficSystem {
 
     // Try to spawn cars based on hour demand
     this._trySpawn(dt, gameHour, speedMult, cityState);
+    this._trySpawnBus(dt, gameHour, speedMult, cityState);
 
     // Update all active cars
     for (const car of this._cars) {
@@ -160,12 +162,12 @@ export class TrafficSystem {
 
       const blocked = this._isBlocked(car);
       if (blocked) {
-        // Brake smoothly; enter waiting only once fully stopped
-        car.speed = Math.max(0, car.speed - 3.0 * dt / 1000);
+        // Brake at same rate as acceleration for smooth visible slowdown
+        car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
       } else {
         // Accelerate from rest
-        car.speed = Math.min(1.0, car.speed + 1.5 * dt / 1000);
+        car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
       }
 
       // Advance position at current speed
@@ -181,7 +183,8 @@ export class TrafficSystem {
         // Arrived at destination
         car.state = 'parked';
         car.mesh.visible = false;
-        car.parkTimer = PARK_MS[0] + Math.random() * (PARK_MS[1] - PARK_MS[0]);
+        // Buses stop longer to pick up / drop off
+        car.parkTimer = car._busParkMs ?? (PARK_MS[0] + Math.random() * (PARK_MS[1] - PARK_MS[0]));
         continue;
       }
 
@@ -200,7 +203,7 @@ export class TrafficSystem {
 
     const rate = HOUR_SPAWN_RATE[gameHour] ?? 0.1;
     // Spawn rate: up to N cars per second of real time, scaled by population and demand
-    const carsPerSec = rate * Math.min(cityState.population / 25, 4.0) * speedMult * 1.5;
+    const carsPerSec = rate * Math.min(cityState.population / 30, 3.0) * speedMult * 0.8;
     this._spawnAccum += carsPerSec * (dt / 1000);
 
     while (this._spawnAccum >= 1 && this._cars.length < MAX_CARS) {
@@ -333,6 +336,57 @@ export class TrafficSystem {
     const returnPath = astar(this._graph, current, start);
     if (!returnPath) return visited;
     return [...visited, ...returnPath.slice(1)];
+  }
+
+  _trySpawnBus(dt, gameHour, speedMult, cityState) {
+    if (speedMult === 0) return;
+    // School bus hours: 7–9 morning and 14–16 afternoon
+    const isBusHour = (gameHour >= 7 && gameHour <= 9) || (gameHour >= 14 && gameHour <= 16);
+    if (!isBusHour) return;
+    if (!cityState || cityState.population < 10) return;
+    // 1 bus every ~20 real seconds during school hours (very occasional)
+    const busRate = 0.05 * speedMult;
+    this._busAccum += busRate * (dt / 1000);
+    while (this._busAccum >= 1) {
+      this._busAccum -= 1;
+      this._spawnBus();
+    }
+  }
+
+  _spawnBus() {
+    const stats = this._grid.getStats();
+    const allB  = stats.allBuildings;
+    // Find a school building
+    const schools = allB.filter(b => b.id === 'primary_school' || b.id === 'high_school');
+    if (!schools.length) return;
+    const school = schools[Math.floor(Math.random() * schools.length)];
+    const schoolEntrances = findBuildingEntrances(this._grid, school);
+    if (!schoolEntrances.length) return;
+    const start = schoolEntrances[Math.floor(Math.random() * schoolEntrances.length)];
+
+    // Find a residential building to "serve"
+    const residential = allB.filter(b => b.def?.zoneType === 'R');
+    if (!residential.length) return;
+    const dest = residential[Math.floor(Math.random() * residential.length)];
+    const destEntrances = findBuildingEntrances(this._grid, dest);
+    if (!destEntrances.length) return;
+    const end = destEntrances[Math.floor(Math.random() * destEntrances.length)];
+
+    const route = astar(this._graph, start, end);
+    if (!route || route.length < 2) return;
+
+    const mesh = createSchoolBus();
+    mesh.castShadow    = true;
+    mesh.receiveShadow = false;
+    this._scene.add(mesh);
+
+    const car = new Car(mesh, route, 'bus', this._nextId++);
+    // Buses drive slower
+    car.speed = 0;
+    // Longer stop at destination (picking up/dropping off kids)
+    car._busParkMs = 4000 + Math.random() * 4000;
+    this._updateCarTransform(car);
+    this._cars.push(car);
   }
 
   // ── Car creation / removal ─────────────────────────────────────────

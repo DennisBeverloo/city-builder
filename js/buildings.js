@@ -1576,7 +1576,7 @@ export function createPlotGardenMesh(plot, seed, zoneType) {
 
     // Trees and bushes scattered inside plot
     const area = W * D;
-    const propCount = Math.floor(area * 0.6 + rng() * area * 0.4);
+    const propCount = Math.floor(area * 1.4 + rng() * area * 0.8);
     // Determine path corridor axis for exclusion
     const pathIsNS = (roadDir === 'N' || roadDir === 'S');
     for (let i = 0; i < propCount; i++) {

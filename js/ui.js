@@ -711,11 +711,27 @@ export function showTileInfo(tile) {
     } else {
       rows.push(['💵 Upkeep/day',   `€${def.monthlyUpkeep}`]);
     }
-    rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
-    rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
-    rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
-    rows.push(['🏡 Land Value',    Math.round(tile.landValue)]);
-    rows.push(['⭐ Desirability',  Math.round(tile.desirability)]);
+    // For plot buildings, aggregate stats across all plot tiles
+    const plotTiles = b.plotTiles;
+    if (plotTiles && plotTiles.length > 1) {
+      // Road access: connected if ANY tile in the plot is connected
+      const connected = plotTiles.some(pt => pt.connected);
+      rows.push(['🛣️ Road access', connected ? 'Yes ✓' : 'No ✗']);
+      const avgHappiness  = plotTiles.reduce((s, pt) => s + (pt.happiness  ?? 0), 0) / plotTiles.length;
+      const avgPollution  = plotTiles.reduce((s, pt) => s + (pt.pollution  ?? 0), 0) / plotTiles.length;
+      const avgLandValue  = plotTiles.reduce((s, pt) => s + (pt.landValue  ?? 0), 0) / plotTiles.length;
+      const avgDesirability = plotTiles.reduce((s, pt) => s + (pt.desirability ?? 0), 0) / plotTiles.length;
+      rows.push(['😊 Happiness',   `${Math.round(avgHappiness)}%`]);
+      rows.push(['🏭 Pollution',   avgPollution <= 20 ? 'Low' : avgPollution <= 50 ? 'Medium' : 'High']);
+      rows.push(['🏡 Land Value',  Math.round(avgLandValue)]);
+      rows.push(['⭐ Desirability', Math.round(avgDesirability)]);
+    } else {
+      rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
+      rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
+      rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
+      rows.push(['🏡 Land Value',    Math.round(tile.landValue)]);
+      rows.push(['⭐ Desirability',  Math.round(tile.desirability)]);
+    }
     if (def.description) rows.push(['Info', def.description]);
   }
 

@@ -310,13 +310,13 @@ function _computeBuildingRotation(tile, buildingId) {
   for (let i = 0; i < bw; i++) {
     if (grid.getTile(tile.x + i, tile.z - bd)?.type === 'road') return Math.PI;
   }
-  // East edge (x + bw): rotation -π/2
+  // East edge (x + bw): rotation +π/2 (face east = +X direction)
   for (let i = 0; i < bd; i++) {
-    if (grid.getTile(tile.x + bw, tile.z - i)?.type === 'road') return -Math.PI / 2;
+    if (grid.getTile(tile.x + bw, tile.z - i)?.type === 'road') return Math.PI / 2;
   }
-  // West edge (x - 1): rotation π/2
+  // West edge (x - 1): rotation -π/2 (face west = -X direction)
   for (let i = 0; i < bd; i++) {
-    if (grid.getTile(tile.x - 1, tile.z - i)?.type === 'road') return Math.PI / 2;
+    if (grid.getTile(tile.x - 1, tile.z - i)?.type === 'road') return -Math.PI / 2;
   }
   return 0; // no road found — face south by default
 }
@@ -355,12 +355,16 @@ function _updateGhostMesh(tile, buildingId) {
     _ghostBuildingId = buildingId;
   }
 
-  const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+  let [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
+  // Recompute rotation first so we can adjust positioning
+  _ghostRotation = _computeBuildingRotation(tile, buildingId);
+  // When rotated 90°, the visual footprint is bw↔bd swapped
+  const _rot90 = Math.abs(Math.abs(_ghostRotation) - Math.PI / 2) < 0.01;
+  if (_rot90) { const tmp = bw; bw = bd; bd = tmp; }
   const worldCX   = tile.x + bw / 2;
   const worldCZ   = tile.z - bd / 2 + 1;
   const TILE_H    = 0.06;
 
-  _ghostRotation        = _computeBuildingRotation(tile, buildingId);
   _ghostMesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
   _ghostMesh.rotation.y = _ghostRotation;
 }
@@ -438,7 +442,10 @@ canvas.addEventListener('mousemove', e => {
     _updateGhostMesh(tile, tool.buildingId);
 
     // Also tint footprint tiles for placement validity feedback
-    const [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
+    // When rotated 90°, swap bw↔bd so the preview matches the visual ghost
+    let [bw, bd] = Array.isArray(def?.size) ? def.size : [1, 1];
+    const _fp90 = Math.abs(Math.abs(_ghostRotation) - Math.PI / 2) < 0.01;
+    if (_fp90) { const tmp = bw; bw = bd; bd = tmp; }
     if (bw > 1 || bd > 1) {
       const footprintTiles = [];
       for (let dx = 0; dx < bw; dx++) {

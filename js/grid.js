@@ -8,7 +8,7 @@ import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, 
 // Tile floor colours
 const C = {
   empty:    0x5a8a3c,
-  zone_r:   0xb8d8b5,   // fainter unoccupied R (was 0x81c784)
+  zone_r:   0x5a8a3c,   // same as landscape — R zones blend into terrain
   zone_c:   0xa8cfe8,   // fainter unoccupied C (was 0x64b5f6)
   zone_i:   0xcbd5dc,   // fainter unoccupied I (was 0xb0bec5)
   pavement: 0xb0b0b0,   // gray pavement for occupied C plots
@@ -269,7 +269,9 @@ export class Grid {
     const def = BUILDINGS[buildingId];
     if (!def) return false;
 
-    const [w, d] = this._getBuildingSize(def);
+    let [w, d] = this._getBuildingSize(def);
+    // When placed with 90° rotation, swap w↔d so tile footprint matches visual orientation
+    if (Math.abs(Math.abs(rotation) - Math.PI / 2) < 0.01) { const _t = w; w = d; d = _t; }
 
     // Collect footprint tiles and validate each
     const footprint = [];
@@ -690,25 +692,38 @@ export class Grid {
 
         const { ddx, ddz, wdx, wdz, rdx, rdz } = DIRS[roadDir];
 
-        // Max plot dimension scales with land value: small in new cities, larger as area develops
+        // Zone-specific max plot dimensions
         const lv = tile.landValue ?? 0;
-        const maxPlotDim = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+        let maxPlotDepth, maxPlotWidth;
+        if (tile.zoneType === 'I') {
+          // Industrial: can be large even at level 1
+          maxPlotDepth = 4;
+          maxPlotWidth = lv < 33 ? 2 : 4;
+        } else if (tile.zoneType === 'R') {
+          // Residential: can be deep (up to 4) but narrow (max 2 wide)
+          maxPlotDepth = 4;
+          maxPlotWidth = lv < 66 ? 2 : 3;
+        } else {
+          // Commercial and others: scale with land value
+          maxPlotDepth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+          maxPlotWidth = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+        }
 
-        const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType, maxPlotDim);
+        const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType, maxPlotDepth);
         if (!firstStrip.length) continue;
 
         const depth = firstStrip.length;
         const strips = [firstStrip];
 
-        // Expand width (up to maxPlotDim), each new strip must also be road-adjacent on the same side
-        for (let w = 1; w < maxPlotDim; w++) {
+        // Expand width, each new strip must also be road-adjacent on the same side
+        for (let w = 1; w < maxPlotWidth; w++) {
           const nx = x + wdx * w, nz = z + wdz * w;
           const nt = this.getTile(nx, nz);
           if (!nt || nt.type !== 'zone' || nt.zoneType !== tile.zoneType) break;
           if (assigned.has(`${nx}_${nz}`)) break;
           const roadNb = this.getTile(nx + rdx, nz + rdz);
           if (roadNb?.type !== 'road') break;
-          const strip = getStrip(nx, nz, ddx, ddz, tile.zoneType, maxPlotDim);
+          const strip = getStrip(nx, nz, ddx, ddz, tile.zoneType, maxPlotDepth);
           if (strip.length < depth) break;
           strips.push(strip.slice(0, depth));
         }
@@ -755,7 +770,7 @@ export class Grid {
 
     // Build the main building mesh centred on the plot
     const mesh = createBuildingMesh(buildingId, seed, plot.width, plot.depth);
-    const ROAD_DIR_ROTATION = { N: Math.PI, S: 0, E: -Math.PI / 2, W: Math.PI / 2 };
+    const ROAD_DIR_ROTATION = { N: Math.PI, S: 0, E: Math.PI / 2, W: -Math.PI / 2 };
     const plotRotation = ROAD_DIR_ROTATION[plot.roadDir] ?? 0;
     mesh.rotation.y = plotRotation;
     mesh.position.set(plot.worldCX, TILE_H / 2 + def.height / 2, plot.worldCZ);
@@ -790,14 +805,14 @@ export class Grid {
       garageMesh: garageMesh || null,
       fillPercentage: isLowDensityR ? 1.0 : 0.1,
       // Residents and jobs scale with plot area to maintain density parity
-      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) * plotArea : 0,
+      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) : 0,
       jobs: (def.provides?.jobs || 0) * plotArea,
       level: 1,
       rotation: plotRotation,
       tileX: plot.anchorX, tileZ: plot.anchorZ,
       plotWidth: plot.width, plotDepth: plot.depth,
       plotRoadDir: plot.roadDir,
-      plotTiles: plot.tiles.map(t => ({ x: t.x, z: t.z })),
+      plotTiles: plot.tiles.map(t => this.getTile(t.x, t.z)).filter(Boolean),
     };
 
     for (const t of plot.tiles) {
