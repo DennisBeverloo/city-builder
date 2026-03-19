@@ -261,7 +261,10 @@ function _buildRoadTexture(key) {
   }
 
   const tex = new THREE.CanvasTexture(canvas);
-  tex.flipY = false; // canvas top = north, matches BoxGeometry top-face UV
+  // flipY must be true (Three.js default): BoxGeometry top-face UV uses
+  // 1-iy/gridY so V=1 at North.  With flipY=true, canvas y=0 → UV V=1 = North.
+  // flipY=false would map canvas-top to South, reversing every corner/junction.
+  tex.flipY = true;
   return tex;
 }
 
