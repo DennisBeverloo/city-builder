@@ -349,5 +349,8 @@ export class TrafficLightSystem {
     this._meshes = [];
   }
 
+  /** Returns true when there is a managed junction at tile coordinates (x, z). */
+  isJunction(x, z) { return this._junctions.has(`${x},${z}`); }
+
   clear() { this._clearMeshes(); this._junctions.clear(); }
 }

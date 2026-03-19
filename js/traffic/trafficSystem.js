@@ -53,8 +53,11 @@ const PERSONAL_VARIANTS = ['sedan','hatchback','pickup','sports'];
 
 // ── Car class ─────────────────────────────────────────────────────────────────
 
-/** Maximum real-milliseconds a car may stay in 'waiting' before despawning. */
-const MAX_WAIT_MS = 5000;
+/** Maximum real-milliseconds a car may stay in 'waiting' before despawning.
+ *  Must be long enough to survive a full red-phase at max game speed (4×).
+ *  Worst case: BASE_GREEN_MS(50000) / 4 + YELLOW_MS(3000) / 4 ≈ 13 750 ms.
+ *  We use 30 000 ms to give a safe margin. */
+const MAX_WAIT_MS = 30_000;
 
 class Car {
   constructor(mesh, route, type, id) {
@@ -160,39 +163,45 @@ export class TrafficSystem {
       }
 
       if (car.state === 'waiting') {
-        car.waitTimer += dt;
-        if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
-        // A car in 'waiting' only unblocks if both the car-ahead and the light are clear
-        const stillCarBlocked   = this._isBlocked(car);
-        const stillLightBlocked = this._isBlockedByRedLight(car);
-        if (!stillCarBlocked && !stillLightBlocked) {
+        const carBlocked  = this._isBlocked(car);
+        const softDist    = this._softStopDist(car);
+        const nearRedStop = softDist < 0.5; // chain-stopped by traffic light ahead
+
+        if (!carBlocked && !nearRedStop) {
+          // Fully clear — resume driving
           car.state = 'driving'; car.waitTimer = 0;
+        } else if (nearRedStop) {
+          // Held by a red light: reset despawn timer so the car doesn't vanish
+          car.waitTimer = 0;
+          car.speed = 0; continue;
         } else {
+          // Still blocked by another car
+          car.waitTimer += dt;
+          if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
           car.speed = 0; continue;
         }
       }
 
-      const blocked      = this._isBlocked(car);
-      const redLight     = this._isBlockedByRedLight(car);
+      const carBlocked = this._isBlocked(car);
+      const softDist   = this._softStopDist(car); // tiles to nearest soft-stop point
 
-      if (blocked) {
-        // Blocked by another car — brake and potentially enter waiting state
+      if (carBlocked) {
+        // Car-to-car block: brake and enter waiting state when fully stopped
         car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
-      } else if (redLight) {
-        // Blocked by a red light — brake, but do NOT enter 'waiting' state
-        // (waiting has a despawn timer; a red light may last much longer)
-        car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
-        // Hold at stop line (continue without advancing position)
-        if (car.speed <= 0) continue;
+      } else if (softDist <= 0.02) {
+        // At or past the stop line / junction hold — park here without despawn timer
+        car.speed = 0;
+        this._updateCarTransform(car);
+        continue;
       } else {
-        // Free to move: accelerate up to full speed
+        // Free to move: accelerate and apply distance-based speed cap
         car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
-        // Approach deceleration near end of route
-        const tilesLeft = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
-        if (tilesLeft < 1.5) {
-          const approachSpeed = Math.max(0.05, tilesLeft / 1.5);
-          car.speed = Math.min(car.speed, approachSpeed);
+        // Combined constraint: red-light / junction box AND route destination
+        const destDist = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
+        const stopDist = Math.min(softDist, destDist);
+        if (stopDist < 1.5) {
+          car.speed = Math.min(car.speed, Math.max(0.02, stopDist / 1.5));
         }
       }
 
@@ -531,18 +540,57 @@ export class TrafficSystem {
   }
 
   /**
-   * Returns true if the car is on an approach tile and the junction ahead is red.
-   * The car begins braking once it's 55% through the approach tile.
+   * Returns the distance in tiles to the nearest upcoming soft-stop point:
+   *   – a red-light stop line (lookahead 2 tiles ahead)
+   *   – an occupied junction (anti-gridlock "don't block the box")
+   * The distance-based approach deceleration is independent of game speed,
+   * so it works correctly at 1×, 2×, or 4× without any threshold hacks.
+   * Returns Infinity when no stop point is near.
    */
-  _isBlockedByRedLight(car) {
-    if (!this._trafficLights) return false;
-    const nextIdx = car.routeIdx + 1;
-    if (nextIdx >= car.route.length) return false;
-    const cur  = car.route[car.routeIdx];
-    const next = car.route[nextIdx];
-    if (!this._trafficLights.isRedFor(cur, next)) return false;
-    // Only start braking when 55% through the approach tile so stop is smooth
-    return car.progress >= 0.50;
+  _softStopDist(car) {
+    if (!this._trafficLights) return Infinity;
+    let minDist = Infinity;
+
+    // ── Red lights (look up to 2 tiles ahead) ──────────────────────────────
+    for (let look = 1; look <= 2; look++) {
+      const idx = car.routeIdx + look;
+      if (idx >= car.route.length) break;
+      if (this._trafficLights.isRedFor(car.route[idx - 1], car.route[idx])) {
+        // Stop 0.15 tiles before the junction boundary (at the stop line)
+        const dist = (1.0 - car.progress) + (look - 1) - 0.15;
+        minDist = Math.min(minDist, dist);
+        break;
+      }
+    }
+
+    // ── Anti-gridlock: don't enter a junction that is already occupied ──────
+    const ni = car.routeIdx + 1;
+    if (ni < car.route.length) {
+      const next = car.route[ni];
+      if (this._trafficLights.isJunction(next.x, next.z) &&
+          this._isJunctionOccupied(next, car)) {
+        // Hold 0.15 tiles before the junction box
+        const dist = (1.0 - car.progress) - 0.15;
+        minDist = Math.min(minDist, dist);
+      }
+    }
+
+    return minDist;
+  }
+
+  /**
+   * Returns true if any other car's world position falls inside the 1×1 tile
+   * bounding box of `junctionTile`.  Used to prevent gridlock.
+   */
+  _isJunctionOccupied(junctionTile, excludeCar) {
+    const cx = junctionTile.x + 0.5;
+    const cz = junctionTile.z + 0.5;
+    for (const other of this._cars) {
+      if (other === excludeCar || other.state === 'parked' || other.state === 'done') continue;
+      if (Math.abs(other.mesh.position.x - cx) < 0.48 &&
+          Math.abs(other.mesh.position.z - cz) < 0.48) return true;
+    }
+    return false;
   }
 
   _isBlocked(car) {
