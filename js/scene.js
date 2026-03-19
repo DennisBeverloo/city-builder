@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createBuildingMesh, createBridgeMesh, BUILDINGS } from './buildings.js';
+import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, createGarageMesh } from './buildings.js';
 
 const GRID_SIZE    = 40;
 const GRID_CENTER  = new THREE.Vector3(GRID_SIZE / 2, 0, GRID_SIZE / 2);
@@ -446,6 +446,14 @@ export function rebuildSceneFromGrid(grid) {
     if (tile.isBridge) {
       mesh = createBridgeMesh();
       mesh.position.set(x + 0.5, _TILE_H / 2, z + 0.5);
+    } else if (tile.building.plotTiles) {
+      // Plot building: centre the mesh on the plot's world bounding box
+      const plotTiles = tile.building.plotTiles;
+      const xs = plotTiles.map(t => t.x), zs = plotTiles.map(t => t.z);
+      const worldCX = (Math.min(...xs) + Math.max(...xs) + 1) / 2;
+      const worldCZ = (Math.min(...zs) + Math.max(...zs) + 1) / 2;
+      mesh = createBuildingMesh(id, x + z * grid.size);
+      mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
     } else {
       const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
       const worldCX = x + bw / 2;
@@ -459,6 +467,40 @@ export function rebuildSceneFromGrid(grid) {
     _scene.add(mesh);
     tile.building.mesh = mesh;
     if (grid._bMeshes) grid._bMeshes.set(`${x}_${z}`, mesh);
+
+    // Recreate garden + garage meshes for plot buildings
+    if (tile.building.plotTiles) {
+      const plotTiles = tile.building.plotTiles;
+      const xs = plotTiles.map(t => t.x), zs = plotTiles.map(t => t.z);
+      const worldCX = (Math.min(...xs) + Math.max(...xs) + 1) / 2;
+      const worldCZ = (Math.min(...zs) + Math.max(...zs) + 1) / 2;
+
+      if (!tile.building.gardenMesh) {
+        const fakeplot = {
+          tiles:    plotTiles,
+          roadDir:  tile.building.plotRoadDir,
+          width:    tile.building.plotWidth,
+          depth:    tile.building.plotDepth,
+        };
+        const gardenMesh = createPlotGardenMesh(fakeplot, x + z * grid.size, def.zoneType);
+        if (gardenMesh) {
+          gardenMesh.position.set(0, _TILE_H / 2, 0);
+          _scene.add(gardenMesh);
+          tile.building.gardenMesh = gardenMesh;
+        }
+      }
+
+      if (!tile.building.garageMesh &&
+          def.zoneType === 'R' &&
+          tile.building.plotWidth * tile.building.plotDepth >= 4) {
+        const garageMesh = createGarageMesh(x + z * grid.size + 77777);
+        const offX = (tile.building.plotRoadDir === 'E') ? -0.4 : 0.4;
+        const offZ = (tile.building.plotRoadDir === 'N') ? 0.35 : -0.35;
+        garageMesh.position.set(worldCX + offX, _TILE_H / 2, worldCZ + offZ);
+        _scene.add(garageMesh);
+        tile.building.garageMesh = garageMesh;
+      }
+    }
   }
 
   // Apply labor state colors immediately so loaded state is visually correct.

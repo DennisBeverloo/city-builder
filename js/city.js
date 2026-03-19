@@ -350,6 +350,11 @@ export class City extends EventEmitter {
           baseColor:       tile.building.baseColor,
           tileX:           tile.building.tileX,
           tileZ:           tile.building.tileZ,
+          // Plot-specific fields
+          plotWidth:       tile.building.plotWidth  ?? null,
+          plotDepth:       tile.building.plotDepth  ?? null,
+          plotRoadDir:     tile.building.plotRoadDir ?? null,
+          plotTiles:       tile.building.plotTiles  ?? null,
         } : null,
       }));
 
@@ -390,9 +395,16 @@ export class City extends EventEmitter {
         .map(t => ({ x: t.x, z: t.z }));
 
       // Collect old building meshes before clearing tile.building
-      const oldMeshes = this._grid.getAllTiles()
-        .filter(t => t.building?.mesh)
-        .map(t => t.building.mesh);
+      const oldMeshes = [];
+      const _seenB = new Set();
+      for (const t of this._grid.getAllTiles()) {
+        const b = t.building;
+        if (!b || _seenB.has(b)) continue;
+        _seenB.add(b);
+        if (b.mesh)       oldMeshes.push(b.mesh);
+        if (b.gardenMesh) oldMeshes.push(b.gardenMesh);
+        if (b.garageMesh) oldMeshes.push(b.garageMesh);
+      }
 
       // Restore city state (unpause on load)
       const snap = save.snapshot ?? {};
@@ -434,6 +446,8 @@ export class City extends EventEmitter {
               id:              saved.building.type,
               def,
               mesh:            null,   // recreated by rebuildSceneFromGrid
+              gardenMesh:      null,   // recreated by rebuildSceneFromGrid
+              garageMesh:      null,   // recreated by rebuildSceneFromGrid
               fillPercentage:  saved.building.fillPercentage ?? (def.zoneType ? 0.1 : 1.0),
               residents:       saved.building.residents  ?? 0,
               jobs:            saved.building.jobs       ?? (def.provides?.jobs || 0),
@@ -444,6 +458,11 @@ export class City extends EventEmitter {
               laborStateTurns: saved.building.laborStateTurns ?? 0,
               recovering:      saved.building.recovering      ?? false,
               baseColor:       saved.building.baseColor       ?? def.color,
+              // Plot-specific fields (null for non-plot buildings)
+              plotWidth:       saved.building.plotWidth   ?? null,
+              plotDepth:       saved.building.plotDepth   ?? null,
+              plotRoadDir:     saved.building.plotRoadDir ?? null,
+              plotTiles:       saved.building.plotTiles   ?? null,
             };
           } else {
             tile.building = null;   // unknown building type — treat as empty
@@ -513,9 +532,16 @@ export class City extends EventEmitter {
       .filter(t => t.terrainType === 'forest')
       .map(t => ({ x: t.x, z: t.z }));
 
-    const oldMeshes = this._grid.getAllTiles()
-      .filter(t => t.building?.mesh)
-      .map(t => t.building.mesh);
+    const oldMeshes = [];
+    const _seenBuildings = new Set();
+    for (const t of this._grid.getAllTiles()) {
+      const b = t.building;
+      if (!b || _seenBuildings.has(b)) continue;
+      _seenBuildings.add(b);
+      if (b.mesh)       oldMeshes.push(b.mesh);
+      if (b.gardenMesh) oldMeshes.push(b.gardenMesh);
+      if (b.garageMesh) oldMeshes.push(b.garageMesh);
+    }
 
     // Reset city state
     this._state = _makeInitialState();
@@ -588,9 +614,10 @@ export class City extends EventEmitter {
     for (const t of this._grid.getAllTiles()) {
       const b = t.building;
       if (!b || !b.def.zoneType) continue;
-      // Low-density houses are instantly occupied at placement — leave them alone.
-      // Only high-density residential (size > 1, i.e. apartments) fills gradually.
-      if (b.def.zoneType === 'R' && b.def.size === 1) continue;
+      // Only update on the anchor tile to avoid processing the same plot multiple times
+      if (t.x !== b.tileX || t.z !== b.tileZ) continue;
+      // Low-density houses (plot-based R) are instantly occupied at placement — leave them alone.
+      if (b.def.zoneType === 'R' && (b.def.size === 1 || b.plotTiles)) continue;
       const prev = b.fillPercentage ?? 0.1;
       b.fillPercentage = Math.min(1.0, prev + rate * (1.0 - prev));
       if (b.def.zoneType === 'R') {
@@ -750,6 +777,8 @@ export class City extends EventEmitter {
     for (const tile of this._grid.getAllTiles()) {
       const b = tile.building;
       if (!b) continue;
+      // Only process anchor tiles to avoid double-updating shared plot building objects
+      if (tile.x !== b.tileX || tile.z !== b.tileZ) continue;
       const zt = b.def?.zoneType;
       if (zt !== 'C' && zt !== 'I') continue;
 
@@ -810,21 +839,23 @@ export class City extends EventEmitter {
     const zoneMap = { R: 'residential_low', C: 'commercial_low', I: 'industrial_low' };
     const level   = this._state.cityLevel;
 
-    for (const tile of this._grid.getAllTiles()) {
-      if (tile.type !== 'zone' || tile.building || !tile.connected) continue;
-      const demand = d[tile.zoneType] ?? 0;
+    // Detect unbuilt plots (only includes unbuilt, road-adjacent zone rectangles)
+    const plots = this._grid.detectPlots();
+
+    for (const plot of plots) {
+      const demand = d[plot.zoneType] ?? 0;
       if (demand < 20) continue;
+      const buildingId = zoneMap[plot.zoneType];
+      const def = BUILDINGS[buildingId];
+      if (!def) continue;
+      if ((def.unlockAtLevel ?? 1) > level) continue;
+      if ((def.requires?.power || 0) > 0 && !powerOK) continue;
+      if ((def.requires?.water || 0) > 0 && !waterOK) continue;
+      if (Math.random() > 0.5) continue; // 50% chance per sim tick = staggered development
 
-      const buildingId = zoneMap[tile.zoneType];
-      const def        = BUILDINGS[buildingId];
-      if (!def)                                                        continue;
-      if ((def.unlockAtLevel  ?? 1) > level)                          continue;
-      if ((def.requires?.power || 0) > 0 && !powerOK)                 continue;
-      if ((def.requires?.water || 0) > 0 && !waterOK)                 continue;
-      if (Math.random() > 0.75) continue;
-
-      this._grid.placeBuilding(tile.x, tile.z, buildingId);
-      this._initCIBuilding(this._grid.getTile(tile.x, tile.z)?.building);
+      this._grid.placePlot(plot, buildingId);
+      const anchor = this._grid.getTile(plot.anchorX, plot.anchorZ);
+      this._initCIBuilding(anchor?.building);
     }
 
     const bs = this._bootstrapSpawnedThisMonth;
@@ -836,14 +867,12 @@ export class City extends EventEmitter {
       if (!def) return;
       if ((def.requires?.power || 0) > 0 && !powerOK) return;
       if ((def.requires?.water || 0) > 0 && !waterOK) return;
-
-      const tile = this._grid.getAllTiles().find(
-        t => t.type === 'zone' && t.zoneType === zoneType && !t.building && t.connected
-      );
-      if (!tile) return;
-
-      this._grid.placeBuilding(tile.x, tile.z, buildingId);
-      this._initCIBuilding(tile.building);
+      const plots2 = this._grid.detectPlots().filter(p => p.zoneType === zoneType);
+      if (!plots2.length) return;
+      const plot2 = plots2[0];
+      this._grid.placePlot(plot2, buildingId);
+      const anchor2 = this._grid.getTile(plot2.anchorX, plot2.anchorZ);
+      this._initCIBuilding(anchor2?.building);
       bs[zoneType] = true;
     };
 

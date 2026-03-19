@@ -3,7 +3,7 @@
  * 40×40 tile grid: manages tile state AND Three.js floor/building meshes.
  */
 import * as THREE from 'three';
-import { createBuildingMesh, createBridgeMesh, BUILDINGS } from './buildings.js';
+import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, createGarageMesh } from './buildings.js';
 
 // Tile floor colours
 const C = {
@@ -361,12 +361,31 @@ export class Grid {
 
     if (tile.building) {
       const def = tile.building.def;
-      const [w, d] = this._getBuildingSize(def);
+
+      // Remove garden and garage meshes if present (plot buildings)
+      if (tile.building.gardenMesh) this._scene.remove(tile.building.gardenMesh);
+      if (tile.building.garageMesh) this._scene.remove(tile.building.garageMesh);
 
       // Remove mesh (keyed by anchor)
       this._removeBuildingMesh(x, z);
 
-      // Clear every tile in the footprint
+      // For plot buildings, clear all plot tiles
+      if (tile.building.plotTiles) {
+        for (const pt of tile.building.plotTiles) {
+          const ft = this.getTile(pt.x, pt.z);
+          if (!ft) continue;
+          ft.building = null;
+          ft.type = ft.zoneType ? 'zone' : 'empty';
+          this._restoreColor(ft);
+        }
+        this._bMeshes.delete(this._key(x, z));
+        this.calculateRoadAccess();
+        return true;
+      }
+
+      const [w, d] = this._getBuildingSize(def);
+
+      // Clear every tile in the footprint (non-plot buildings)
       for (let dx = 0; dx < w; dx++) {
         for (let dz = 0; dz < d; dz++) {
           const ft = this.getTile(x + dx, z - dz);
@@ -593,6 +612,172 @@ export class Grid {
     this._applyTileHappiness();
   }
 
+  // ── Plot detection ───────────────────────────────────────────────
+
+  /**
+   * Returns array of unbuilt plot descriptors for all connected zone tiles
+   * adjacent to roads. Max 4 wide × 4 deep per plot.
+   */
+  detectPlots() {
+    const plots = [];
+    const assigned = new Set(); // "x_z" keys
+
+    // direction config: rdx/rdz = road neighbour delta, ddx/ddz = depth direction, wdx/wdz = width direction
+    const DIRS = {
+      N: { rdx:  0, rdz: -1, ddx:  0, ddz:  1, wdx: 1, wdz: 0 },
+      S: { rdx:  0, rdz:  1, ddx:  0, ddz: -1, wdx: 1, wdz: 0 },
+      E: { rdx:  1, rdz:  0, ddx: -1, ddz:  0, wdx: 0, wdz: 1 },
+      W: { rdx: -1, rdz:  0, ddx:  1, ddz:  0, wdx: 0, wdz: 1 },
+    };
+
+    const getStrip = (sx, sz, ddx, ddz, zoneType) => {
+      let totalAvail = 0, hasFarRoad = false;
+      for (let d = 0; d < 8; d++) {
+        const tx = sx + ddx * d, tz = sz + ddz * d;
+        const t = this.getTile(tx, tz);
+        if (!t || t.type !== 'zone' || t.zoneType !== zoneType) break;
+        if (assigned.has(`${tx}_${tz}`)) break;
+        totalAvail = d + 1;
+        const far = this.getTile(tx + ddx, tz + ddz);
+        if (far?.type === 'road') { hasFarRoad = true; break; }
+      }
+      const maxD = hasFarRoad ? Math.ceil(totalAvail / 2) : Math.min(totalAvail, 4);
+      const strip = [];
+      for (let d = 0; d < maxD; d++) {
+        const tx = sx + ddx * d, tz = sz + ddz * d;
+        const t = this.getTile(tx, tz);
+        if (!t || t.type !== 'zone' || t.zoneType !== zoneType || assigned.has(`${tx}_${tz}`)) break;
+        strip.push(t);
+      }
+      return strip;
+    };
+
+    for (let z = 0; z < this.size; z++) {
+      for (let x = 0; x < this.size; x++) {
+        const key = `${x}_${z}`;
+        if (assigned.has(key)) continue;
+        const tile = this._tiles[z][x];
+        if (tile.type !== 'zone' || tile.building) continue;
+
+        // Find which side has a road (prefer N > S > E > W)
+        let roadDir = null;
+        for (const dir of ['N', 'S', 'E', 'W']) {
+          const { rdx, rdz } = DIRS[dir];
+          const nb = this.getTile(x + rdx, z + rdz);
+          if (nb?.type === 'road') { roadDir = dir; break; }
+        }
+        if (!roadDir) continue;
+
+        const { ddx, ddz, wdx, wdz, rdx, rdz } = DIRS[roadDir];
+        const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType);
+        if (!firstStrip.length) continue;
+
+        const depth = firstStrip.length;
+        const strips = [firstStrip];
+
+        // Expand width (up to 4 total), each new strip must also be road-adjacent on the same side
+        for (let w = 1; w < 4; w++) {
+          const nx = x + wdx * w, nz = z + wdz * w;
+          const nt = this.getTile(nx, nz);
+          if (!nt || nt.type !== 'zone' || nt.zoneType !== tile.zoneType) break;
+          if (assigned.has(`${nx}_${nz}`)) break;
+          const roadNb = this.getTile(nx + rdx, nz + rdz);
+          if (roadNb?.type !== 'road') break;
+          const strip = getStrip(nx, nz, ddx, ddz, tile.zoneType);
+          if (strip.length < depth) break;
+          strips.push(strip.slice(0, depth));
+        }
+
+        const allTiles = strips.flat();
+        for (const t of allTiles) assigned.add(`${t.x}_${t.z}`);
+
+        const anchor = strips[0][0];
+        const xs = allTiles.map(t => t.x), zs = allTiles.map(t => t.z);
+        plots.push({
+          anchorX: anchor.x, anchorZ: anchor.z,
+          width: strips.length, depth,
+          zoneType: tile.zoneType,
+          roadDir,
+          tiles: allTiles,
+          worldCX: (Math.min(...xs) + Math.max(...xs) + 1) / 2,
+          worldCZ: (Math.min(...zs) + Math.max(...zs) + 1) / 2,
+        });
+      }
+    }
+    return plots;
+  }
+
+  /**
+   * Place a plot building. Creates the building mesh centred on the plot,
+   * adds a garden mesh (fence + props) and optionally a garage.
+   * Assigns the same building object to all plot tiles.
+   * @param {object} plot  Descriptor from detectPlots()
+   * @param {string} buildingId
+   * @returns {boolean}
+   */
+  placePlot(plot, buildingId) {
+    const def = BUILDINGS[buildingId];
+    if (!def) return false;
+
+    // Validate all tiles are still free zone tiles
+    for (const t of plot.tiles) {
+      const tile = this.getTile(t.x, t.z);
+      if (!tile || tile.type !== 'zone' || tile.building) return false;
+    }
+
+    const TILE_H = 0.06;
+    const seed = plot.anchorX + plot.anchorZ * this.size;
+
+    // Build the main building mesh centred on the plot
+    const mesh = createBuildingMesh(buildingId, seed);
+    mesh.position.set(plot.worldCX, TILE_H / 2 + def.height / 2, plot.worldCZ);
+    mesh.userData.buildingId = buildingId;
+    mesh.userData.tileX = plot.anchorX;
+    mesh.userData.tileZ = plot.anchorZ;
+    this._scene.add(mesh);
+    this._bMeshes.set(this._key(plot.anchorX, plot.anchorZ), mesh);
+
+    // Garden mesh (fence around plot perimeter + props)
+    const gardenMesh = createPlotGardenMesh(plot, seed, def.zoneType);
+    if (gardenMesh) {
+      gardenMesh.position.set(0, TILE_H / 2, 0);
+      this._scene.add(gardenMesh);
+    }
+
+    // Garage for larger residential plots (area >= 4)
+    let garageMesh = null;
+    if (def.zoneType === 'R' && plot.width * plot.depth >= 4) {
+      garageMesh = createGarageMesh(seed);
+      const offX = (plot.roadDir === 'E') ? -0.4 : 0.4;
+      const offZ = (plot.roadDir === 'N') ? 0.35 : -0.35;
+      garageMesh.position.set(plot.worldCX + offX, TILE_H / 2, plot.worldCZ + offZ);
+      this._scene.add(garageMesh);
+    }
+
+    const isLowDensityR = def.zoneType === 'R';
+    const building = {
+      id: buildingId, def, mesh,
+      gardenMesh: gardenMesh || null,
+      garageMesh: garageMesh || null,
+      fillPercentage: isLowDensityR ? 1.0 : 0.1,
+      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) : 0,
+      jobs: def.provides?.jobs || 0,
+      level: 1,
+      tileX: plot.anchorX, tileZ: plot.anchorZ,
+      plotWidth: plot.width, plotDepth: plot.depth,
+      plotRoadDir: plot.roadDir,
+      plotTiles: plot.tiles.map(t => ({ x: t.x, z: t.z })),
+    };
+
+    for (const t of plot.tiles) {
+      const tile = this.getTile(t.x, t.z);
+      if (tile) { tile.building = building; this._restoreColor(tile); }
+    }
+
+    this.calculateRoadAccess();
+    return true;
+  }
+
   getStats() {
     let population = 0, totalJobs = 0, cJobs = 0, iJobs = 0, serviceJobs = 0;
     let powerNeeded = 0, powerAvailable = 0;
@@ -604,9 +789,20 @@ export class Grid {
 
     for (const t of this.getAllTiles()) {
       if (t.type === 'zone') {
-        if      (t.zoneType === 'R') { rZones++; if (t.building) { rBuildings++; avgRFill += t.building.fillPercentage ?? 0; } }
-        else if (t.zoneType === 'C') { cZones++; if (t.building) cBuildings++; }
-        else if (t.zoneType === 'I') { iZones++; if (t.building) iBuildings++; }
+        if (t.zoneType === 'R') {
+          rZones++;
+          // Only count on the anchor tile to avoid double-counting plot buildings
+          if (t.building && t.x === t.building.tileX && t.z === t.building.tileZ) {
+            rBuildings++;
+            avgRFill += t.building.fillPercentage ?? 0;
+          }
+        } else if (t.zoneType === 'C') {
+          cZones++;
+          if (t.building && t.x === t.building.tileX && t.z === t.building.tileZ) cBuildings++;
+        } else if (t.zoneType === 'I') {
+          iZones++;
+          if (t.building && t.x === t.building.tileX && t.z === t.building.tileZ) iBuildings++;
+        }
       }
       if (!t.building) continue;
       // Only count the anchor tile of multi-tile buildings (satellites share the same object)

@@ -226,7 +226,7 @@ function cachedMat(color) {
 const M = {
   window:       cachedMat(0x1a237e),
   windowShop:   cachedMat(0x0d47a1),
-  path:         cachedMat(0xbdbdbd),
+  path:         cachedMat(0x9e9e9e),
   chimney:      cachedMat(0x5d4037),
   chimneyMetal: cachedMat(0x546e7a),
   fencePost:    cachedMat(0x757575),
@@ -247,6 +247,11 @@ const M = {
   concrete:     cachedMat(0xe0e0e0),
   tank:         cachedMat(0x607d8b),
   stripe:       cachedMat(0xfafafa),
+  // Plot garden / garage materials
+  wood:         cachedMat(0x8d6e63),  // brown fence
+  darkMetal:    cachedMat(0x424242),  // dark grey garage door
+  wall:         cachedMat(0xeceff1),  // garage wall
+  roof2:        cachedMat(0x78909c),  // garage flat roof
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1463,4 +1468,112 @@ export function getBuildingDef(id) {
  */
 export function getUnlockedBuildings(level) {
   return Object.values(BUILDINGS).filter(b => b.unlockAtLevel <= level);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plot garden and garage mesh helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a garden Group for a plot: fence around perimeter + random props.
+ * The group is positioned at world-space origin (0,0,0); caller sets position.
+ * @param {{ tiles: {x,z}[], roadDir: string, width: number, depth: number }} plot
+ * @param {number} seed
+ * @param {string} zoneType  'R' | 'C' | 'I'
+ * @returns {THREE.Group|null}
+ */
+export function createPlotGardenMesh(plot, seed, zoneType) {
+  const rng = mkRand(seed + 9999);
+  const group = new THREE.Group();
+  const { tiles, roadDir } = plot;
+  const xs = tiles.map(t => t.x), zs = tiles.map(t => t.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const W = maxX - minX + 1, D = maxZ - minZ + 1;
+  const cx = minX + W / 2, cz = minZ + D / 2; // world centre
+
+  const fenceT = 0.04;
+
+  // Helper: fence segment using existing fence helpers
+  const fenceSgmX = (wx1, wx2, wz) => addFenceX(group, wx1, wx2, wz, 0);
+  const fenceSgmZ = (wz1, wz2, wx) => addFenceZ(group, wz1, wz2, wx, 0);
+
+  const gapW = Math.min(0.5, W * 0.4); // entrance gap width
+
+  // North fence (z = minZ edge)
+  if (roadDir !== 'N') {
+    fenceSgmX(minX, maxX + 1, minZ);
+  } else {
+    const lEnd = cx - gapW / 2;
+    const rStart = cx + gapW / 2;
+    if (lEnd > minX)    fenceSgmX(minX, lEnd, minZ);
+    if (rStart < maxX + 1) fenceSgmX(rStart, maxX + 1, minZ);
+  }
+  // South fence (z = maxZ + 1 edge)
+  if (roadDir !== 'S') {
+    fenceSgmX(minX, maxX + 1, maxZ + 1);
+  } else {
+    const lEnd = cx - gapW / 2;
+    const rStart = cx + gapW / 2;
+    if (lEnd > minX)    fenceSgmX(minX, lEnd, maxZ + 1);
+    if (rStart < maxX + 1) fenceSgmX(rStart, maxX + 1, maxZ + 1);
+  }
+  // West fence (x = minX edge)
+  if (roadDir !== 'W') {
+    fenceSgmZ(minZ, maxZ + 1, minX);
+  }
+  // East fence (x = maxX + 1 edge)
+  if (roadDir !== 'E') {
+    fenceSgmZ(minZ, maxZ + 1, maxX + 1);
+  }
+
+  // Props: trees and bushes scattered inside plot
+  const area = W * D;
+  const propCount = Math.floor(area * 0.8 + rng() * area);
+  for (let i = 0; i < propCount; i++) {
+    const px = minX + 0.3 + rng() * (W - 0.6);
+    const pz = minZ + 0.3 + rng() * (D - 0.6);
+    // Don't overlap the building mesh (rough centre exclusion)
+    const dx = px - cx, dz = pz - cz;
+    if (Math.abs(dx) < 0.4 && Math.abs(dz) < 0.4) continue;
+    if (rng() < 0.4) addTree(group, px, pz, 0);
+    else             addBush(group, px, pz, 0);
+  }
+
+  // For residential plots: a thin path strip from road-facing edge inward
+  if (zoneType === 'R' && area >= 2) {
+    const pathH = 0.01;
+    let pathMesh;
+    if (roadDir === 'N' || roadDir === 'S') {
+      pathMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, pathH, D * 0.6), M.path);
+      const pz2 = roadDir === 'N' ? minZ + D * 0.3 : maxZ + 1 - D * 0.3;
+      pathMesh.position.set(cx, pathH / 2, pz2);
+    } else {
+      pathMesh = new THREE.Mesh(new THREE.BoxGeometry(D * 0.6, pathH, 0.15), M.path);
+      const px2 = roadDir === 'W' ? minX + D * 0.3 : maxX + 1 - D * 0.3;
+      pathMesh.position.set(px2, pathH / 2, cz);
+    }
+    pathMesh.castShadow = true;
+    group.add(pathMesh);
+  }
+
+  return group;
+}
+
+/**
+ * Small garage box for larger residential plots.
+ * @param {number} seed
+ * @returns {THREE.Group}
+ */
+export function createGarageMesh(seed) {
+  const rng = mkRand(seed + 77777);
+  const group = new THREE.Group();
+  // Garage body
+  const gw = 0.28 + rng() * 0.06, gd = 0.22 + rng() * 0.04, gh = 0.18;
+  addBox(group, gw, gh, gd, 0, gh / 2, 0, M.wall);
+  // Flat roof
+  addBox(group, gw + 0.02, 0.02, gd + 0.02, 0, gh + 0.01, 0, M.roof2);
+  // Garage door (dark rectangle on front face, -Z side)
+  addBox(group, gw * 0.7, gh * 0.65, 0.01, 0, gh * 0.4, -gd / 2 - 0.001, M.darkMetal);
+  return group;
 }
