@@ -332,8 +332,9 @@ export class City extends EventEmitter {
         type:        tile.type,
         zoneType:    tile.zoneType,
         terrainType: tile.terrainType,
-        isBridge:    tile.isBridge,
-        connected:   tile.connected,
+        isBridge:     tile.isBridge,
+        trafficLight: tile.trafficLight || false,
+        connected:    tile.connected,
         desirability: tile.desirability,
         pollution:   tile.pollution,
         happiness:   tile.happiness,
@@ -428,8 +429,9 @@ export class City extends EventEmitter {
         tile.type        = saved.type;
         tile.zoneType    = saved.zoneType    ?? null;
         tile.terrainType = saved.terrainType ?? null;
-        tile.isBridge    = saved.isBridge    ?? false;
-        tile.connected   = saved.connected   ?? false;
+        tile.isBridge     = saved.isBridge     ?? false;
+        tile.trafficLight = saved.trafficLight ?? false;
+        tile.connected    = saved.connected    ?? false;
         tile.desirability    = saved.desirability ?? 0;
         tile.pollution       = saved.pollution    ?? 0;
         tile.happiness       = saved.happiness    ?? 50;
@@ -995,6 +997,44 @@ export class City extends EventEmitter {
       this.emit('stateChanged', this.getState());
     }
     return { placed, cost: spent, errors: [] };
+  }
+
+  /**
+   * Toggle traffic lights on a junction tile.
+   * Placing costs €500; removing refunds €250.
+   * Returns { success, reason? }
+   */
+  placeTrafficLight(x, z) {
+    const tile = this._grid.getTile(x, z);
+    if (!tile || tile.type !== 'road')
+      return { success: false, reason: 'Traffic lights can only be placed on road tiles' };
+
+    // Validate it's a genuine junction (3+ road neighbours)
+    const neighbours = [
+      this._grid.getTile(x, z - 1),
+      this._grid.getTile(x, z + 1),
+      this._grid.getTile(x + 1, z),
+      this._grid.getTile(x - 1, z),
+    ].filter(t => t?.type === 'road').length;
+    if (neighbours < 3)
+      return { success: false, reason: 'Traffic lights require a junction (3 or more roads meeting)' };
+
+    if (tile.trafficLight) {
+      // Remove — partial refund
+      tile.trafficLight = false;
+      this._state.money += 250;
+      this.emit('stateChanged', this.getState());
+      return { success: true, removed: true };
+    } else {
+      // Place — charge full cost
+      const cost = 500;
+      if (this._state.money < cost)
+        return { success: false, reason: `Not enough money (need €${cost})` };
+      tile.trafficLight = true;
+      this._state.money -= cost;
+      this.emit('stateChanged', this.getState());
+      return { success: true, removed: false };
+    }
   }
 
   placeZoneRect(tiles, zoneType) {

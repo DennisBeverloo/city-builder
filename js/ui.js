@@ -86,7 +86,15 @@ function _injectInfraButtons(toolbar) {
   if (solarBtn)   powerBtn.after(solarBtn);
   if (nuclearBtn) solarBtn.after(nuclearBtn);
   if (smallPump)  infra.insertBefore(smallPump,  waterBtn);
-  // Road is already last in the group — no reordering needed
+
+  // Traffic lights button — placed after the road button
+  const roadBtn = infra.querySelector('[data-building="road"]');
+  const tlBtn   = document.createElement('button');
+  tlBtn.dataset.tool = 'trafficLight';
+  tlBtn.textContent  = '🚦 Traffic Lights';
+  tlBtn.title        = '🚦 Traffic Lights\nCost: €500 | Sell back: €250\nClick a junction (3+ roads) to place or remove';
+  if (roadBtn) roadBtn.after(tlBtn);
+  else infra.appendChild(tlBtn);
 }
 
 /**
@@ -227,6 +235,8 @@ function _setActiveTool(btn) {
     _activeTool = { type: 'zone', zoneType: btn.dataset.zone };
   } else if (toolType === 'building') {
     _activeTool = { type: 'building', buildingId: btn.dataset.building };
+  } else if (toolType === 'trafficLight') {
+    _activeTool = { type: 'trafficLight' };
   } else if (toolType === 'demolish') {
     _activeTool = { type: 'demolish' };
   } else if (toolType === 'select') {

@@ -169,9 +169,10 @@ export class TrafficLightSystem {
     for (let z = 0; z < g.size; z++) {
       for (let x = 0; x < g.size; x++) {
         const tile = g.getTile(x, z);
-        if (tile?.type !== 'road' || tile.isBridge) continue;
+        // Only build lights where the player has explicitly placed them
+        if (!tile?.trafficLight || tile.type !== 'road' || tile.isBridge) continue;
 
-        // Count road neighbours
+        // Verify it is still a valid junction (road may have been removed nearby)
         const nb = [
           { dir: 'N', nx: x,   nz: z-1 },
           { dir: 'S', nx: x,   nz: z+1 },
@@ -179,7 +180,7 @@ export class TrafficLightSystem {
           { dir: 'W', nx: x-1, nz: z   },
         ].filter(n => g.getTile(n.nx, n.nz)?.type === 'road');
 
-        if (nb.length < 3) continue;   // not a junction
+        if (nb.length < 3) continue;   // no longer a valid junction — skip silently
 
         // Build approaches from the neighbour list
         const approaches = [];

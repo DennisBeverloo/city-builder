@@ -77,6 +77,7 @@ export class Grid {
           zoneType:    null,      // R | C | I
           terrainType: null,      // river | forest | field
           isBridge:    false,     // road tile that was placed over river
+          trafficLight: false,   // player has placed traffic lights on this junction
           building:    null,      // { id, def, residents, fillPercentage, jobs, level, tileX, tileZ }
           connected:   false,     // has road access
           happiness:        50,   // 0–100, per-tile, driven by services + parks - pollution

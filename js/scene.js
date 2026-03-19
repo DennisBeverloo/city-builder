@@ -183,13 +183,13 @@ function _connectivityKey(grid, tile) {
   return n | s | e | w;
 }
 
-const _roadMaterials = new Array(16).fill(null);
+let _roadMaterials = new Array(16).fill(null);
 
 function _buildRoadTexture(key) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 128;
   const ctx  = canvas.getContext('2d');
-  const size = 128, half = 64, sw = 9; // sw = sidewalk strip width
+  const size = 128, half = 64, sw = 13; // sw = sidewalk strip width
 
   const n = (key >> 3) & 1, s = (key >> 2) & 1;
   const e = (key >> 1) & 1, w = key & 1;
@@ -206,7 +206,7 @@ function _buildRoadTexture(key) {
   if (!e) ctx.fillRect(size - sw, 0, sw, size);
 
   // Dashed centre-line markings
-  ctx.strokeStyle = '#78909c';
+  ctx.strokeStyle = '#cfd8dc';
   ctx.lineWidth   = 3;
   ctx.lineCap     = 'butt';
   ctx.setLineDash([10, 7]);

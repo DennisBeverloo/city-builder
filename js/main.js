@@ -533,11 +533,21 @@ function _handleTileClick(tile, tool) {
         const [w, d] = Array.isArray(def.size) ? def.size : [1, 1];
         spawnCostToast(tile.x + w / 2, tile.z - d / 2 + 1, def.cost);
       }
+      // Road placement can create/destroy junctions — keep traffic lights in sync
+      if (tool.buildingId === 'road') trafficLights.rebuild();
       hideRangeOverlay();
+    }
+
+  } else if (tool.type === 'trafficLight') {
+    result = city.placeTrafficLight(tile.x, tile.z);
+    if (result?.success) {
+      trafficLights.rebuild();
+      spawnCostToast(tile.x + 0.5, tile.z + 0.5, result.removed ? -250 : 500);
     }
 
   } else if (tool.type === 'demolish') {
     result = city.demolish(tile.x, tile.z);
+    if (result?.success) trafficLights.rebuild();
 
   } else if (tool.type === 'select') {
     if (_selectedTile === tile) {
