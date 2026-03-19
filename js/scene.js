@@ -450,7 +450,7 @@ export function rebuildSceneFromGrid(grid) {
       const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
       const worldCX = x + bw / 2;
       const worldCZ = z - bd / 2 + 1;
-      mesh = createBuildingMesh(id);
+      mesh = createBuildingMesh(id, x + z * 40);
       mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
     }
     mesh.userData.buildingId = id;

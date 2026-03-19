@@ -308,7 +308,7 @@ export class Grid {
     // Create mesh centred on the footprint
     const worldCX = ax + w / 2;
     const worldCZ = az - d / 2 + 1;
-    const mesh = createBuildingMesh(buildingId);
+    const mesh = createBuildingMesh(buildingId, ax + az * 40);
     mesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
     mesh.userData.buildingId = buildingId;
     mesh.userData.tileX      = ax;
