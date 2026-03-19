@@ -309,7 +309,7 @@ export class Grid {
     // Create mesh centred on the footprint
     const worldCX = ax + w / 2;
     const worldCZ = az - d / 2 + 1;
-    const mesh = createBuildingMesh(buildingId, ax + az * 40);
+    const mesh = createBuildingMesh(buildingId, ax + az * this.size);
     mesh.position.set(worldCX, TILE_H / 2 + def.height / 2, worldCZ);
     mesh.rotation.y = rotation;
     mesh.userData.buildingId = buildingId;
@@ -633,7 +633,7 @@ export class Grid {
       W: { rdx: -1, rdz:  0, ddx:  1, ddz:  0, wdx: 0, wdz: 1 },
     };
 
-    const getStrip = (sx, sz, ddx, ddz, zoneType) => {
+    const getStrip = (sx, sz, ddx, ddz, zoneType, maxPlotDim) => {
       let totalAvail = 0, hasFarRoad = false;
       for (let d = 0; d < 8; d++) {
         const tx = sx + ddx * d, tz = sz + ddz * d;
@@ -644,7 +644,10 @@ export class Grid {
         const far = this.getTile(tx + ddx, tz + ddz);
         if (far?.type === 'road') { hasFarRoad = true; break; }
       }
-      const maxD = hasFarRoad ? Math.ceil(totalAvail / 2) : Math.min(totalAvail, 4);
+      const cap  = maxPlotDim ?? 4;
+      const maxD = hasFarRoad
+        ? Math.min(Math.ceil(totalAvail / 2), cap)
+        : Math.min(totalAvail, cap);
       const strip = [];
       for (let d = 0; d < maxD; d++) {
         const tx = sx + ddx * d, tz = sz + ddz * d;
@@ -684,21 +687,26 @@ export class Grid {
         if (!roadDir) continue;
 
         const { ddx, ddz, wdx, wdz, rdx, rdz } = DIRS[roadDir];
-        const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType);
+
+        // Max plot dimension scales with land value: small in new cities, larger as area develops
+        const lv = tile.landValue ?? 0;
+        const maxPlotDim = lv < 33 ? 2 : lv < 66 ? 3 : 4;
+
+        const firstStrip = getStrip(x, z, ddx, ddz, tile.zoneType, maxPlotDim);
         if (!firstStrip.length) continue;
 
         const depth = firstStrip.length;
         const strips = [firstStrip];
 
-        // Expand width (up to 4 total), each new strip must also be road-adjacent on the same side
-        for (let w = 1; w < 4; w++) {
+        // Expand width (up to maxPlotDim), each new strip must also be road-adjacent on the same side
+        for (let w = 1; w < maxPlotDim; w++) {
           const nx = x + wdx * w, nz = z + wdz * w;
           const nt = this.getTile(nx, nz);
           if (!nt || nt.type !== 'zone' || nt.zoneType !== tile.zoneType) break;
           if (assigned.has(`${nx}_${nz}`)) break;
           const roadNb = this.getTile(nx + rdx, nz + rdz);
           if (roadNb?.type !== 'road') break;
-          const strip = getStrip(nx, nz, ddx, ddz, tile.zoneType);
+          const strip = getStrip(nx, nz, ddx, ddz, tile.zoneType, maxPlotDim);
           if (strip.length < depth) break;
           strips.push(strip.slice(0, depth));
         }
@@ -773,13 +781,15 @@ export class Grid {
     }
 
     const isLowDensityR = def.zoneType === 'R';
+    const plotArea      = plot.width * plot.depth;
     const building = {
       id: buildingId, def, mesh,
       gardenMesh: gardenMesh || null,
       garageMesh: garageMesh || null,
       fillPercentage: isLowDensityR ? 1.0 : 0.1,
-      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) : 0,
-      jobs: def.provides?.jobs || 0,
+      // Residents and jobs scale with plot area to maintain density parity
+      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) * plotArea : 0,
+      jobs: (def.provides?.jobs || 0) * plotArea,
       level: 1,
       rotation: plotRotation,
       tileX: plot.anchorX, tileZ: plot.anchorZ,

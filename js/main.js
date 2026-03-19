@@ -27,7 +27,7 @@ const camera    = getCamera();
 const renderer  = getRenderer();
 const controls  = getControls();
 
-const grid = new Grid(scene, 40);
+const grid = new Grid(scene, 80);
 const city = new City(grid);
 
 generateTerrain(grid, scene);
@@ -594,6 +594,19 @@ function _handleKeyPan() {
 
 let _lastTime = 0;
 
+// ── FPS counter ───────────────────────────────────────────────────────────────
+const _fpsEl = document.createElement('div');
+_fpsEl.id = 'fps-counter';
+Object.assign(_fpsEl.style, {
+  position: 'fixed', bottom: '8px', right: '8px',
+  background: 'rgba(0,0,0,0.45)', color: '#fff',
+  font: '11px/1.4 monospace', padding: '2px 7px',
+  borderRadius: '4px', pointerEvents: 'none', zIndex: '9999',
+  userSelect: 'none',
+});
+document.body.appendChild(_fpsEl);
+let _fpsCount = 0, _fpsAccum = 0, _fpsDisplay = 0;
+
 function animate(ts) {
   requestAnimationFrame(animate);
   const dt = Math.min(ts - _lastTime, 200);
@@ -602,6 +615,14 @@ function animate(ts) {
   city.tick(dt);
   trafficSystem.tick(dt, city.getGameHour(), city.getSpeedMultiplier(), city.getState());
   render();
+  // FPS
+  _fpsCount++;
+  _fpsAccum += dt;
+  if (_fpsAccum >= 500) {
+    _fpsDisplay = Math.round(_fpsCount * 1000 / _fpsAccum);
+    _fpsEl.textContent = `${_fpsDisplay} FPS`;
+    _fpsCount = 0; _fpsAccum = 0;
+  }
 }
 
 requestAnimationFrame(t => { _lastTime = t; animate(t); });

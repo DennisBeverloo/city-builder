@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, createGarageMesh } from './buildings.js';
 
-const GRID_SIZE    = 40;
+const GRID_SIZE    = 80;
 const GRID_CENTER  = new THREE.Vector3(GRID_SIZE / 2, 0, GRID_SIZE / 2);
 const BASE_FRUSTUM = 35; // world units visible vertically at zoom=1
 
@@ -25,7 +25,7 @@ export function initScene(container) {
   // ── Scene ────────────────────────────────────────────────────────
   _scene = new THREE.Scene();
   _scene.background = new THREE.Color(0x87ceeb);
-  _scene.fog = new THREE.Fog(0x87ceeb, 90, 130);
+  _scene.fog = new THREE.Fog(0x87ceeb, 140, 220);
 
   // ── Camera ───────────────────────────────────────────────────────
   const aspect = container.clientWidth / container.clientHeight;
@@ -38,7 +38,7 @@ export function initScene(container) {
   );
 
   // Isometric angle: 45° in XZ plane, ~35° elevation
-  _camera.position.set(GRID_CENTER.x + 30, 30, GRID_CENTER.z + 30);
+  _camera.position.set(GRID_CENTER.x + 50, 50, GRID_CENTER.z + 50);
   _camera.lookAt(GRID_CENTER);
   _camera.updateProjectionMatrix();
 
@@ -55,10 +55,10 @@ export function initScene(container) {
   _scene.add(ambient);
 
   const sun = new THREE.DirectionalLight(0xfff4e0, 1.0);
-  sun.position.set(45, 70, 25);
+  sun.position.set(80, 120, 40);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { near: 1, far: 200, left: -55, right: 55, top: 55, bottom: -55 });
+  sun.shadow.mapSize.set(4096, 4096);
+  Object.assign(sun.shadow.camera, { near: 1, far: 400, left: -100, right: 100, top: 100, bottom: -100 });
   _scene.add(sun);
 
   // Secondary fill light from opposite side
@@ -458,7 +458,7 @@ export function rebuildSceneFromGrid(grid) {
       const [bw, bd] = Array.isArray(def.size) ? def.size : [def.size || 1, def.size || 1];
       const worldCX = x + bw / 2;
       const worldCZ = z - bd / 2 + 1;
-      mesh = createBuildingMesh(id, x + z * 40);
+      mesh = createBuildingMesh(id, x + z * grid.size);
       mesh.position.set(worldCX, _TILE_H / 2 + def.height / 2, worldCZ);
       mesh.rotation.y = tile.building.rotation || 0;
     }

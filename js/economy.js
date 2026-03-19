@@ -37,15 +37,15 @@ export function processMonth(placedBuildings, simConfig = {}) {
     expenses         += def.monthlyUpkeep;
     breakdown.upkeep += def.monthlyUpkeep;
 
+    const plotArea = (b.plotWidth ?? 1) * (b.plotDepth ?? 1);
     if (def.zoneType === 'R') {
-      // b.residents is fill-adjusted (capacity * fillPercentage), updated monthly
       const tax = (b.residents || 0) * 10;
       income += tax;  breakdown.residentialTax += tax;
     } else if (def.zoneType === 'C') {
-      const tax = 50 * cTaxMult;
+      const tax = 50 * cTaxMult * plotArea;
       income += tax;  breakdown.commercialTax += tax;
     } else if (def.zoneType === 'I') {
-      const tax = 80 * (b.fillPercentage ?? 1.0);
+      const tax = 80 * (b.fillPercentage ?? 1.0) * plotArea;
       income += tax;  breakdown.industrialTax += tax;
     }
   }

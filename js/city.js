@@ -65,7 +65,7 @@ const SAVE_VERSION      = 1;
 
 function _makeInitialState() {
   return {
-    money:               50_000,
+    money:               100_000,
     population:          0,
     happiness:           50,
     cityLevel:           1,
@@ -293,8 +293,9 @@ export class City extends EventEmitter {
     const cTM  = CFG.cUndersupplyEfficiency + (1 - CFG.cUndersupplyEfficiency) * supR;
     for (const b of allB) {
       if (b.laborState !== 'abandoned') continue;
-      if (b.def?.zoneType === 'C') result.breakdown.commercialTax  -= 50 * cTM;
-      if (b.def?.zoneType === 'I') result.breakdown.industrialTax  -= 80 * (b.fillPercentage ?? 1.0);
+      const pa = (b.plotWidth ?? 1) * (b.plotDepth ?? 1);
+      if (b.def?.zoneType === 'C') result.breakdown.commercialTax  -= 50 * cTM * pa;
+      if (b.def?.zoneType === 'I') result.breakdown.industrialTax  -= 80 * (b.fillPercentage ?? 1.0) * pa;
     }
     result.breakdown.commercialTax = Math.max(0, result.breakdown.commercialTax);
     result.breakdown.industrialTax = Math.max(0, result.breakdown.industrialTax);
@@ -623,7 +624,8 @@ export class City extends EventEmitter {
       const prev = b.fillPercentage ?? 0.1;
       b.fillPercentage = Math.min(1.0, prev + rate * (1.0 - prev));
       if (b.def.zoneType === 'R') {
-        b.residents = rBuildingCapacity * b.fillPercentage;
+        const plotArea = (b.plotWidth ?? 1) * (b.plotDepth ?? 1);
+        b.residents = rBuildingCapacity * plotArea * b.fillPercentage;
       }
     }
   }
@@ -1075,8 +1077,8 @@ export class City extends EventEmitter {
       const def = b.def;
       const up  = def.monthlyUpkeep;
       if      (def.zoneType === 'R') { rTax += (b.residents || 0) * 10 * ie;                                         rCount++; groups.residential.amount += up; groups.residential.count++; }
-      else if (def.zoneType === 'C') { if (b.laborState !== 'abandoned') cTax += 50 * cTaxMult * le * ie;            cCount++; groups.commercial.amount  += up; groups.commercial.count++;  }
-      else if (def.zoneType === 'I') { if (b.laborState !== 'abandoned') iTax += 80 * (b.fillPercentage ?? 1.0) * le * ie; iCount++; groups.industrial.amount  += up; groups.industrial.count++;  }
+      else if (def.zoneType === 'C') { const pa=(b.plotWidth??1)*(b.plotDepth??1); if (b.laborState !== 'abandoned') cTax += 50 * cTaxMult * le * ie * pa; cCount++; groups.commercial.amount  += up; groups.commercial.count++;  }
+      else if (def.zoneType === 'I') { const pa=(b.plotWidth??1)*(b.plotDepth??1); if (b.laborState !== 'abandoned') iTax += 80 * (b.fillPercentage ?? 1.0) * le * ie * pa; iCount++; groups.industrial.amount  += up; groups.industrial.count++;  }
       else if (def.id === 'police_station')                              { groups.police.amount    += up; groups.police.count++;    }
       else if (def.id === 'fire_station')                                { groups.fire.amount      += up; groups.fire.count++;      }
       else if (def.id === 'hospital')                                    { groups.hospital.amount  += up; groups.hospital.count++;  }
