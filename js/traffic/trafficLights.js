@@ -179,6 +179,7 @@ export class TrafficLightSystem {
   constructor() {
     this._scene     = null;
     this._grid      = null;
+    this._leftHand  = false;       // mirrors traffic system handedness
     this._junctions = new Map();   // "jx,jz" → Junction
     this._meshes    = [];          // all Three.js objects owned by this system
   }
@@ -186,6 +187,12 @@ export class TrafficLightSystem {
   init(scene, grid) {
     this._scene = scene;
     this._grid  = grid;
+    this.rebuild();
+  }
+
+  /** Mirror the traffic system's handedness setting and rebuild pole positions. */
+  setHandedness(leftHand) {
+    this._leftHand = leftHand;
     this.rebuild();
   }
 
@@ -259,15 +266,22 @@ export class TrafficLightSystem {
    * @param {'N'|'S'|'E'|'W'} dir  The approach direction
    */
   _poleTransform(jx, jz, dir) {
+    // In right-hand traffic laneX = -dirZ*off, laneZ = dirX*off, so:
+    //   southbound (dirZ=+1): laneX = -0.13  → west side  → right = west
+    //   northbound (dirZ=-1): laneX = +0.13  → east side  → right = east
+    //   westbound  (dirX=-1): laneZ = -0.13  → north side → right = north
+    //   eastbound  (dirX=+1): laneZ = +0.13  → south side → right = south
+    // Left-hand traffic mirrors each pair.
+    const lh = this._leftHand;
     switch (dir) {
-      // N approach: tile (jx, jz-1), driver going south.  Right = west.  Face = -Z (north).
-      case 'N': return { px: jx + 0.12, pz: jz - 0.10, ry: Math.PI };
-      // S approach: tile (jx, jz+1), driver going north.  Right = east.  Face = +Z (south).
-      case 'S': return { px: jx + 0.88, pz: jz + 1.10, ry: 0 };
-      // E approach: tile (jx+1, jz), driver going west.  Right = south.  Face = +X (east).
-      case 'E': return { px: jx + 1.10, pz: jz + 0.88, ry: Math.PI / 2 };
-      // W approach: tile (jx-1, jz), driver going east.  Right = north.  Face = -X (west).
-      case 'W': return { px: jx - 0.10, pz: jz + 0.12, ry: -Math.PI / 2 };
+      // N approach: driver going south. RHT right = west (low X);  LHT right = east (high X).
+      case 'N': return { px: lh ? jx + 0.88 : jx + 0.12, pz: jz - 0.10, ry: Math.PI };
+      // S approach: driver going north. RHT right = east (high X); LHT right = west (low X).
+      case 'S': return { px: lh ? jx + 0.12 : jx + 0.88, pz: jz + 1.10, ry: 0 };
+      // E approach: driver going west.  RHT right = north (low Z); LHT right = south (high Z).
+      case 'E': return { px: jx + 1.10, pz: lh ? jz + 0.88 : jz + 0.12, ry: Math.PI / 2 };
+      // W approach: driver going east.  RHT right = south (high Z); LHT right = north (low Z).
+      case 'W': return { px: jx - 0.10, pz: lh ? jz + 0.12 : jz + 0.88, ry: -Math.PI / 2 };
     }
   }
 

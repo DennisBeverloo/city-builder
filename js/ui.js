@@ -905,6 +905,7 @@ export function initPauseMenu(city) {
     const saved = localStorage.getItem('traffic_leftHand') === 'true';
     trafficBtn.textContent = saved ? '🇬🇧 Drive left' : '🇺🇸 Drive right';
     if (window._trafficSystem) window._trafficSystem.setHandedness(saved);
+    if (window._trafficLights)  window._trafficLights.setHandedness(saved);
 
     trafficBtn.addEventListener('click', () => {
       const currentlyLeft = localStorage.getItem('traffic_leftHand') === 'true';
@@ -912,6 +913,7 @@ export function initPauseMenu(city) {
       localStorage.setItem('traffic_leftHand', String(newLeft));
       trafficBtn.textContent = newLeft ? '🇬🇧 Drive left' : '🇺🇸 Drive right';
       if (window._trafficSystem) window._trafficSystem.setHandedness(newLeft);
+      if (window._trafficLights)  window._trafficLights.setHandedness(newLeft);
     });
   }
 

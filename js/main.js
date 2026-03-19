@@ -49,7 +49,7 @@ city.on('laborStateChanged', applyLaborStateColors);
 const trafficSystem = new TrafficSystem();
 trafficSystem.init(scene, grid);
 
-// Expose for settings
+// Expose for settings / handedness toggle
 window._trafficSystem = trafficSystem;
 
 city.on('stateChanged', () => trafficSystem.rebuild());
@@ -57,6 +57,7 @@ city.on('stateChanged', () => trafficSystem.rebuild());
 const trafficLights = new TrafficLightSystem();
 trafficLights.init(scene, grid);
 trafficSystem.setTrafficLights(trafficLights);
+window._trafficLights = trafficLights;
 
 city.on('stateChanged', () => trafficLights.rebuild());
 
