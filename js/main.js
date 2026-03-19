@@ -62,6 +62,7 @@ function _refreshHeatmap() {
 }
 
 initHeatmapControls(_refreshHeatmap);
+city.on('stateChanged',   _refreshHeatmap);
 city.on('dayTick',        _refreshHeatmap);
 city.on('monthProcessed', _refreshHeatmap);
 

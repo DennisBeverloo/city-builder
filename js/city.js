@@ -4,7 +4,7 @@
  * No Three.js. Communicates outward via EventEmitter callbacks.
  *
  * Simulation cadence:
- *   Every 5 game-days  → _updateSimulation (pop/power/water/happiness/RCI/auto-spawn)
+ *   Every 6 game-hours → _updateSimulation (pop/power/water/happiness/RCI/auto-spawn)
  *   Every 30 game-days → _advanceMonth (taxes + upkeep + autosave)
  */
 import { BUILDINGS } from './buildings.js';
@@ -57,9 +57,9 @@ export const SIMULATION_CONFIG = {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const LEVEL_THRESHOLDS = [0, 500, 1500, 3000, 6000, 12000, 25000, 50000, 100_000, 250_000];
-const SIM_TICK_DAYS    = 5;
-const SAVE_VERSION     = 1;
+const LEVEL_THRESHOLDS  = [0, 500, 1500, 3000, 6000, 12000, 25000, 50000, 100_000, 250_000];
+const SIM_TICK_HOURS    = 6;   // _updateSimulation runs every N game-hours
+const SAVE_VERSION      = 1;
 
 // ── Initial state factory ─────────────────────────────────────────────────────
 
@@ -179,6 +179,14 @@ export class City extends EventEmitter {
 
   _advanceHour() {
     this._state.gameHour = (this._state.gameHour + 1) % 24;
+
+    // Run simulation every SIM_TICK_HOURS game-hours (e.g. every 6 hrs = 6s at 1×)
+    if (this._state.gameHour % SIM_TICK_HOURS === 0) {
+      const stats = this._grid.getStats();
+      const { power, water } = this._calcPowerWater(stats.allBuildings);
+      this._updateSimulation(stats, power, water);
+    }
+
     if (this._state.gameHour === 0) {
       this._advanceDay();
     }
@@ -193,12 +201,6 @@ export class City extends EventEmitter {
     if (isMonthEnd) {
       this._updateFillPercentages();
       this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
-    }
-
-    if (d.day % SIM_TICK_DAYS === 0 || isMonthEnd) {
-      const stats = this._grid.getStats();
-      const { power, water } = this._calcPowerWater(stats.allBuildings);
-      this._updateSimulation(stats, power, water);
     }
 
     // Daily economy tick every day
