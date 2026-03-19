@@ -588,6 +588,9 @@ export class City extends EventEmitter {
     for (const t of this._grid.getAllTiles()) {
       const b = t.building;
       if (!b || !b.def.zoneType) continue;
+      // Low-density houses are instantly occupied at placement — leave them alone.
+      // Only high-density residential (size > 1, i.e. apartments) fills gradually.
+      if (b.def.zoneType === 'R' && b.def.size === 1) continue;
       const prev = b.fillPercentage ?? 0.1;
       b.fillPercentage = Math.min(1.0, prev + rate * (1.0 - prev));
       if (b.def.zoneType === 'R') {

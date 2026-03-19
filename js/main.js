@@ -280,6 +280,8 @@ let _dragActiveTool = null;   // tool captured at drag start
 let _isDragging     = false;
 let _mouseDownX     = 0;
 let _mouseDownY     = 0;
+let _rightMouseDownX = 0;
+let _rightMouseDownY = 0;
 let _lastHoveredTile = null;
 let _selectedTile    = null;
 
@@ -288,6 +290,7 @@ const canvas = renderer.domElement;
 // ── mousedown ─────────────────────────────────────────────────────
 
 canvas.addEventListener('mousedown', e => {
+  if (e.button === 2) { _rightMouseDownX = e.clientX; _rightMouseDownY = e.clientY; return; }
   if (e.button !== 0) return;
   _mouseDownX = e.clientX;
   _mouseDownY = e.clientY;
@@ -370,8 +373,13 @@ canvas.addEventListener('mousemove', e => {
 // ── mouseup ───────────────────────────────────────────────────────
 
 canvas.addEventListener('mouseup', e => {
-  // Right-click → cancel tool, suppress context menu
-  if (e.button === 2) { resetTool(); return; }
+  // Right-click → cancel tool only on pure click (not a right-drag pan)
+  if (e.button === 2) {
+    const dx = e.clientX - _rightMouseDownX;
+    const dy = e.clientY - _rightMouseDownY;
+    if (Math.abs(dx) <= 4 && Math.abs(dy) <= 4) resetTool();
+    return;
+  }
   if (e.button !== 0) return;
 
   if (_isDragging && _dragStart) {
