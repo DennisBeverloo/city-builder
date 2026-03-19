@@ -126,18 +126,16 @@ export class Grid {
   }
 
   _setTileColor(tile, color) {
-    if (tile.mesh?.material?.map) {
-      // Texture-based material (e.g. road markings): tint only, don't replace
-      tile.mesh.material.color.setHex(color);
-    } else {
-      tile.mesh.material = new THREE.MeshLambertMaterial({ color });
-    }
+    tile.mesh.material = new THREE.MeshLambertMaterial({ color });
   }
 
   _restoreColor(tile) {
-    if (tile.mesh?.material?.map) {
-      // Remove any hover/preview tint from texture-based material
-      tile.mesh.material.color.setHex(0xffffff);
+    // Road tiles use a shared textured material managed by scene.js.
+    // Restore it directly so road markings are preserved after hover/preview.
+    // (scene.js stores the material on tile._roadMat when updateRoadMarkings
+    // runs, breaking the circular import that would otherwise be needed.)
+    if (tile.type === 'road' && !tile.isBridge && tile._roadMat) {
+      tile.mesh.material = tile._roadMat;
     } else {
       this._setTileColor(tile, this._tileColor(tile));
     }

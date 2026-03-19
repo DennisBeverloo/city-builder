@@ -205,26 +205,59 @@ function _buildRoadTexture(key) {
   if (!w) ctx.fillRect(0, 0, sw, size);
   if (!e) ctx.fillRect(size - sw, 0, sw, size);
 
-  // Dashed center line.
-  // Pure straight roads (exactly N+S or exactly E+W) get a single edge-to-edge
-  // line for a clean, uniform dash pattern with no doubled centre mark.
-  // All other patterns (turns, T-junctions, 4-way, dead-ends) draw each arm
-  // outward from centre so every corner is always anchored by a visible dash.
+  // Dashed centre-line markings
   ctx.strokeStyle = '#78909c';
   ctx.lineWidth   = 3;
   ctx.lineCap     = 'butt';
   ctx.setLineDash([10, 7]);
 
+  // Draw a single straight segment
   const line = (x1, y1, x2, y2) => {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   };
-  if      (key === 12) line(half, 0,    half, size);  // pure N-S
-  else if (key ===  3) line(0,    half, size, half);  // pure E-W
-  else {
+  // Draw a flowing L-shaped path (corner): dash pattern is continuous around the bend
+  const corner = (x1, y1, x2, y2, x3, y3) => {
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.stroke();
+  };
+
+  const conn = n + s + e + w;
+  if (conn === 0) {
+    // Isolated tile: no centre markings
+  } else if (conn === 1) {
+    // Dead end: stub from centre toward the one connected edge
     if (n) line(half, half, half, 0);
-    if (s) line(half, half, half, size);
-    if (e) line(half, half, size, half);
-    if (w) line(half, half, 0,    half);
+    else if (s) line(half, half, half, size);
+    else if (e) line(half, half, size, half);
+    else        line(half, half, 0,    half);
+  } else if (conn === 2) {
+    if (n && s) {
+      line(half, 0, half, size);                             // Straight N–S
+    } else if (e && w) {
+      line(0, half, size, half);                             // Straight E–W
+    } else if (n && e) {
+      corner(half, 0, half, half, size, half);               // Corner N-E
+    } else if (n && w) {
+      corner(half, 0, half, half, 0,    half);               // Corner N-W
+    } else if (s && e) {
+      corner(half, size, half, half, size, half);            // Corner S-E
+    } else {
+      corner(half, size, half, half, 0,    half);            // Corner S-W
+    }
+  } else if (conn === 3) {
+    // T-junction: draw the straight-through pair then a branch from centre
+    if (n && s) {
+      line(half, 0, half, size);                             // N–S spine
+      if (e) line(half, half, size, half);                   // E branch
+      else   line(half, half, 0,    half);                   // W branch
+    } else {
+      line(0, half, size, half);                             // E–W spine
+      if (n) line(half, half, half, 0);                      // N branch
+      else   line(half, half, half, size);                   // S branch
+    }
+  } else {
+    // Cross: two full edge-to-edge lines
+    line(half, 0, half, size);
+    line(0, half, size, half);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -252,8 +285,14 @@ export function updateRoadMarkings(grid) {
     const key = _connectivityKey(grid, tile);
 
     if (!tile.isBridge) {
-      // Apply road marking texture to the floor tile
-      if (tile.mesh) tile.mesh.material = _getRoadMaterial(key);
+      // Apply road marking texture to the floor tile.
+      // Also cache the material on the tile so _restoreColor in grid.js can
+      // retrieve it without a circular import.
+      if (tile.mesh) {
+        const mat = _getRoadMaterial(key);
+        tile.mesh.material = mat;
+        tile._roadMat = mat;
+      }
     } else {
       // Fix bridge railing visibility: only show rails perpendicular to traffic
       const mesh = tile.building?.mesh;
