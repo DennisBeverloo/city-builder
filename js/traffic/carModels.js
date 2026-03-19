@@ -71,7 +71,7 @@ export function createSedan(color) {
 
   // Cabin — narrower, slightly forward of center
   const cL = 0.155, cW = 0.11, cH = 0.052;
-  const cabMat = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4, metalness: 0.3 });
+  const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 });
   const cab = new THREE.Mesh(new THREE.BoxGeometry(cL, cH, cW), cabMat);
   cab.position.set(0.008, bodyY + bH/2 + cH/2 - 0.002, 0);
   group.add(cab);
@@ -93,7 +93,7 @@ export function createHatchback(color) {
 
   // Wider / taller cabin that extends toward the rear
   const cL = 0.17, cW = 0.115, cH = 0.055;
-  const cabMat = new THREE.MeshStandardMaterial({ color: 0x334455, roughness: 0.4, metalness: 0.3 });
+  const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 });
   const cab = new THREE.Mesh(new THREE.BoxGeometry(cL, cH, cW), cabMat);
   cab.position.set(-0.01, bodyY + bH/2 + cH/2 - 0.002, 0);
   group.add(cab);
@@ -146,7 +146,7 @@ export function createSports(color) {
 
   // Short, low, raked cabin
   const cL = 0.13, cW = 0.12, cH = 0.042;
-  const cabMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.3, metalness: 0.5 });
+  const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.5 });
   const cab = new THREE.Mesh(new THREE.BoxGeometry(cL, cH, cW), cabMat);
   cab.position.set(0.015, bodyY + bH/2 + cH/2 - 0.002, 0);
   group.add(cab);

@@ -50,7 +50,7 @@ export const SIMULATION_CONFIG = {
   cSupplyRatio:              5,
   cUndersupplyEfficiency:    0.50,
   cShoppersPerBuilding:      35,
-  fillGrowthRatePerMonth:    0.15,
+  fillGrowthRatePerMonth:    0.40,  // applied daily as 1/30 fraction for smooth growth
   industryPollutionRadius:   6,
   industryPollutionStrength: 40,
 };
@@ -199,9 +199,11 @@ export class City extends EventEmitter {
     const isMonthEnd = d.day > 30;
 
     if (isMonthEnd) {
-      this._updateFillPercentages();
       this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
     }
+
+    // Grow residential fill percentages every day (1/30 of monthly rate)
+    this._updateFillPercentages(SIMULATION_CONFIG.fillGrowthRatePerMonth / 30);
 
     // Daily economy tick every day
     this._dailyEconTick();
@@ -581,13 +583,13 @@ export class City extends EventEmitter {
 
   // ── Fill percentages ─────────────────────────────────────────────
 
-  _updateFillPercentages() {
-    const { fillGrowthRatePerMonth, rBuildingCapacity } = SIMULATION_CONFIG;
+  _updateFillPercentages(rate) {
+    const { rBuildingCapacity } = SIMULATION_CONFIG;
     for (const t of this._grid.getAllTiles()) {
       const b = t.building;
       if (!b || !b.def.zoneType) continue;
       const prev = b.fillPercentage ?? 0.1;
-      b.fillPercentage = Math.min(1.0, prev + fillGrowthRatePerMonth * (1.0 - prev));
+      b.fillPercentage = Math.min(1.0, prev + rate * (1.0 - prev));
       if (b.def.zoneType === 'R') {
         b.residents = rBuildingCapacity * b.fillPercentage;
       }

@@ -53,6 +53,9 @@ const PERSONAL_VARIANTS = ['sedan','hatchback','pickup','sports'];
 
 // ── Car class ─────────────────────────────────────────────────────────────────
 
+/** Maximum real-milliseconds a car may stay in 'waiting' before despawning. */
+const MAX_WAIT_MS = 5000;
+
 class Car {
   constructor(mesh, route, type, id) {
     this.id        = id;
@@ -62,6 +65,7 @@ class Car {
     this.progress  = 0;       // 0–1 within current segment
     this.state     = 'driving'; // 'driving'|'waiting'|'parked'|'done'
     this.parkTimer = 0;
+    this.waitTimer = 0;       // real-ms spent waiting; despawn if exceeds MAX_WAIT_MS
     this.type      = type;    // 'personal'|'truck'|'police'
     this.elapsedMs = Math.random() * 1000; // stagger police flash
   }
@@ -145,12 +149,15 @@ export class TrafficSystem {
       }
 
       if (car.state === 'waiting') {
-        if (!this._isBlocked(car)) car.state = 'driving';
+        car.waitTimer += dt;
+        if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
+        if (!this._isBlocked(car)) { car.state = 'driving'; car.waitTimer = 0; }
         else continue;
       }
 
       if (this._isBlocked(car)) {
-        car.state = 'waiting';
+        car.state    = 'waiting';
+        car.waitTimer = 0;
         continue;
       }
 
@@ -245,7 +252,7 @@ export class TrafficSystem {
 
     // Police patrol: random chance each spawn
     const hasPolice = allB.some(b => b.id === 'police_station');
-    if (hasPolice && Math.random() < 0.05 && carType !== 'truck') {
+    if (hasPolice && Math.random() < 0.18 && carType !== 'truck') {
       this._spawnPolice(allB);
       return;
     }
@@ -271,13 +278,32 @@ export class TrafficSystem {
     if (!stations.length) return;
     const station  = stations[Math.floor(Math.random() * stations.length)];
     const entrances = findBuildingEntrances(this._grid, station);
-    if (!entrances.length) return;
 
-    const start = entrances[0];
+    // Pick a starting road tile: prefer station entrance, fall back to any road node
+    let start;
+    if (entrances.length) {
+      start = entrances[Math.floor(Math.random() * entrances.length)];
+    } else {
+      const nodes = [...this._graph.keys()];
+      if (!nodes.length) return;
+      const k = nodes[Math.floor(Math.random() * nodes.length)];
+      const [x, z] = k.split(',').map(Number);
+      start = { x, z };
+    }
+
     // Build a patrol route: random walk of PATROL_LENGTH steps, then return
-    const patrol = this._buildPatrolRoute(start, PATROL_LENGTH);
-    if (!patrol || patrol.length < 2) return;
+    let patrol = this._buildPatrolRoute(start, PATROL_LENGTH);
 
+    // If the start tile is a dead-end with no neighbours, try a random road node instead
+    if (!patrol || patrol.length < 2) {
+      const nodes = [...this._graph.keys()];
+      if (!nodes.length) return;
+      const k = nodes[Math.floor(Math.random() * nodes.length)];
+      const [x, z] = k.split(',').map(Number);
+      patrol = this._buildPatrolRoute({ x, z }, PATROL_LENGTH);
+    }
+
+    if (!patrol || patrol.length < 2) return;
     this._createCar('police', patrol);
   }
 
@@ -387,6 +413,13 @@ export class TrafficSystem {
       const dz   = other.mesh.position.z - car.mesh.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist > 0.55 || dist < 0.01) continue;
+
+      // Skip cars travelling in the opposite direction (oncoming traffic in other lane)
+      const otherFrom = other.route[other.routeIdx];
+      const otherTo   = other.route[Math.min(other.routeIdx + 1, other.route.length - 1)];
+      const odX = otherTo.x - otherFrom.x;
+      const odZ = otherTo.z - otherFrom.z;
+      if (dirX * odX + dirZ * odZ < 0) continue; // heading opposite — different lane
 
       // Check if other car is ahead in our direction of travel
       const dot = dx * dirX + dz * dirZ;
