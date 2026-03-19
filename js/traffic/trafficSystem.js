@@ -89,6 +89,7 @@ export class TrafficSystem {
     this._leftHand   = false; // false = right-hand traffic (default)
     this._spawnAccum  = 0;     // accumulates fractional spawn debt
     this._busAccum    = 0;     // school bus spawn accumulator
+    this._trafficLights = null;  // TrafficLightSystem reference
   }
 
   /**
@@ -119,6 +120,11 @@ export class TrafficSystem {
   /** Set left/right hand traffic. Affects lane offset direction. */
   setHandedness(leftHand) {
     this._leftHand = leftHand;
+  }
+
+  /** Wire up the traffic light system so cars can check red lights. */
+  setTrafficLights(tl) {
+    this._trafficLights = tl;
   }
 
   /**
@@ -156,19 +162,33 @@ export class TrafficSystem {
       if (car.state === 'waiting') {
         car.waitTimer += dt;
         if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
-        if (!this._isBlocked(car)) { car.state = 'driving'; car.waitTimer = 0; }
-        else { car.speed = 0; continue; }
+        // A car in 'waiting' only unblocks if both the car-ahead and the light are clear
+        const stillCarBlocked   = this._isBlocked(car);
+        const stillLightBlocked = this._isBlockedByRedLight(car);
+        if (!stillCarBlocked && !stillLightBlocked) {
+          car.state = 'driving'; car.waitTimer = 0;
+        } else {
+          car.speed = 0; continue;
+        }
       }
 
-      const blocked = this._isBlocked(car);
+      const blocked      = this._isBlocked(car);
+      const redLight     = this._isBlockedByRedLight(car);
+
       if (blocked) {
-        // Brake visibly — same rate as acceleration
+        // Blocked by another car — brake and potentially enter waiting state
         car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
         if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
+      } else if (redLight) {
+        // Blocked by a red light — brake, but do NOT enter 'waiting' state
+        // (waiting has a despawn timer; a red light may last much longer)
+        car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
+        // Hold at stop line (continue without advancing position)
+        if (car.speed <= 0) continue;
       } else {
-        // Accelerate from rest or cruise
+        // Free to move: accelerate up to full speed
         car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
-        // Slow down when approaching the end of the route
+        // Approach deceleration near end of route
         const tilesLeft = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
         if (tilesLeft < 1.5) {
           const approachSpeed = Math.max(0.05, tilesLeft / 1.5);
@@ -510,6 +530,21 @@ export class TrafficSystem {
     }
   }
 
+  /**
+   * Returns true if the car is on an approach tile and the junction ahead is red.
+   * The car begins braking once it's 55% through the approach tile.
+   */
+  _isBlockedByRedLight(car) {
+    if (!this._trafficLights) return false;
+    const nextIdx = car.routeIdx + 1;
+    if (nextIdx >= car.route.length) return false;
+    const cur  = car.route[car.routeIdx];
+    const next = car.route[nextIdx];
+    if (!this._trafficLights.isRedFor(cur, next)) return false;
+    // Only start braking when 55% through the approach tile so stop is smooth
+    return car.progress >= 0.50;
+  }
+
   _isBlocked(car) {
     if (car.route.length < 2) return false;
     const from = car.route[car.routeIdx];
@@ -549,4 +584,7 @@ export class TrafficSystem {
   }
 
   get activeCarCount() { return this._cars.length; }
+
+  /** Returns the live car array (for traffic light demand counting). */
+  getCars() { return this._cars; }
 }

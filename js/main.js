@@ -18,6 +18,7 @@ import {
 import { BUILDINGS, createBuildingMesh } from './buildings.js';
 import { initModalTriggers } from './modals.js';
 import { TrafficSystem } from './traffic/trafficSystem.js';
+import { TrafficLightSystem } from './traffic/trafficLights.js';
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,12 @@ window._trafficSystem = trafficSystem;
 
 city.on('stateChanged', () => trafficSystem.rebuild());
 
+const trafficLights = new TrafficLightSystem();
+trafficLights.init(scene, grid);
+trafficSystem.setTrafficLights(trafficLights);
+
+city.on('stateChanged', () => trafficLights.rebuild());
+
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 
 function _refreshHeatmap() {
@@ -80,6 +87,7 @@ city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   updateRoadMarkings(grid);
   _refreshHeatmap();
   trafficSystem.clear(); trafficSystem.rebuild();
+  trafficLights.clear(); trafficLights.rebuild();
 });
 
 city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
@@ -95,6 +103,7 @@ city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
   updateRoadMarkings(grid);
   _refreshHeatmap();
   trafficSystem.clear(); trafficSystem.rebuild();
+  trafficLights.clear(); trafficLights.rebuild();
 });
 
 city.emit('stateChanged', city.getState());
@@ -644,6 +653,7 @@ function animate(ts) {
   _handleKeyPan();
   city.tick(dt);
   trafficSystem.tick(dt, city.getGameHour(), city.getSpeedMultiplier(), city.getState());
+  trafficLights.tick(dt, city.getSpeedMultiplier(), trafficSystem.getCars());
   render();
   // FPS
   _fpsCount++;
