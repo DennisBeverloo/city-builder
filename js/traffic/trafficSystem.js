@@ -172,18 +172,22 @@ export class TrafficSystem {
           // Fully clear — resume driving
           car.state = 'driving'; car.waitTimer = 0;
         } else if (atRedLight) {
-          // Held by a red light: reset despawn timer so the car doesn't vanish
+          // Lead car held by red light — never despawn
           car.waitTimer = 0; car.speed = 0; continue;
         } else {
-          // Still blocked by another car
-          car.waitTimer += dt;
+          // Blocked by the car in front — queued in line
+          // If a red junction is anywhere ahead in the next few tiles, reset
+          // the despawn timer so the whole queue survives the red phase.
+          if (this._hasRedLightAhead(car, 6)) car.waitTimer = 0;
+          else car.waitTimer += dt;
           if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
           car.speed = 0; continue;
         }
       }
 
-      // ── Traffic light / junction hard gate (fires every frame, before movement) ──
-      if (this._trafficLights) {
+      // ── Traffic light hard gate — only fires for the lead car (no car in front) ──
+      // Cars following another car rely on car-following alone; they don't look at lights.
+      if (this._trafficLights && !this._isBlocked(car)) {
         const ni = car.routeIdx + 1;
         if (ni < car.route.length) {
           const curTile  = car.route[car.routeIdx];
@@ -606,6 +610,21 @@ export class TrafficSystem {
       const perpZ = dz - dot * dirZ;
       const lateralDist = Math.sqrt(perpX * perpX + perpZ * perpZ);
       if (dot > 0.1 && lateralDist < 0.35) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if there is a red-light junction within `lookahead` tiles
+   * ahead of this car's current route position.  Used to prevent queued cars
+   * from despawning while waiting behind the lead car at a red light.
+   */
+  _hasRedLightAhead(car, lookahead = 6) {
+    if (!this._trafficLights) return false;
+    for (let i = 1; i <= lookahead; i++) {
+      const idx = car.routeIdx + i;
+      if (idx >= car.route.length) break;
+      if (this._trafficLights.isRedFor(car.route[idx - 1], car.route[idx])) return true;
     }
     return false;
   }

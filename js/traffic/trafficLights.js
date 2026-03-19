@@ -8,10 +8,10 @@ import * as THREE from 'three';
 const TILE_H = 0.06;
 
 // ── Timing constants ──────────────────────────────────────────────────────────
-const BASE_GREEN_MS  = 18_000;   // minimum green time (game-ms = real-ms × speedMult)
-const MAX_GREEN_MS   = 50_000;   // maximum green time
-const YELLOW_MS      =  3_000;   // yellow duration (fixed)
-const CARS_PER_SEC_BONUS = 2_500; // extra ms of green per queued car on approach
+const BASE_GREEN_MS  =  6_000;   // minimum green time (game-ms = real-ms × speedMult)
+const MAX_GREEN_MS   = 12_000;   // maximum green time (keeps phases under MAX_WAIT_MS / speedMult)
+const YELLOW_MS      =  2_000;   // yellow duration (fixed)
+const CARS_PER_SEC_BONUS =  500; // extra ms of green per queued car on approach
 
 // ── Mesh helpers ──────────────────────────────────────────────────────────────
 
