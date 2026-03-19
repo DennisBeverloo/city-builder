@@ -174,6 +174,7 @@ function getZoneRectTiles(a, b) {
 function isDraggable(tool) {
   return tool && (
     tool.type === 'zone' ||
+    tool.type === 'demolish' ||
     (tool.type === 'building' && tool.buildingId === 'road')
   );
 }
@@ -182,7 +183,7 @@ function isDraggable(tool) {
 function getDragTiles(tool, start, end) {
   if (tool.type === 'building' && tool.buildingId === 'road')
     return getRoadLineTiles(start, end);
-  if (tool.type === 'zone')
+  if (tool.type === 'zone' || tool.type === 'demolish')
     return getZoneRectTiles(start, end);
   return [];
 }
@@ -467,6 +468,13 @@ function _applyDrag(tool, tiles) {
     if (result.placed > 0) {
       showNotification(`${result.placed} ${tool.zoneType} zone tiles painted`, 'info', 1500);
     }
+  } else if (tool.type === 'demolish') {
+    let count = 0;
+    for (const tile of tiles) {
+      const r = city.demolish(tile.x, tile.z);
+      if (r?.success) count++;
+    }
+    if (count > 0) showNotification(`${count} tile${count > 1 ? 's' : ''} demolished`, 'info', 1500);
   }
 
   // Refresh info panel if selected tile was in the drag

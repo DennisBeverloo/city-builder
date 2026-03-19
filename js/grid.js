@@ -393,6 +393,33 @@ export class Grid {
   }
 
   /**
+   * Remove a plain road tile, reverting it to empty.
+   * @param {number} x @param {number} z
+   */
+  removeRoad(x, z) {
+    const tile = this.getTile(x, z);
+    if (!tile || tile.type !== 'road' || tile.isBridge) return false;
+    tile.type = 'empty';
+    this._restoreColor(tile);
+    this.calculateRoadAccess();
+    return true;
+  }
+
+  /**
+   * Remove zone paint from a tile, reverting it to empty.
+   * @param {number} x @param {number} z
+   */
+  clearZone(x, z) {
+    const tile = this.getTile(x, z);
+    if (!tile || tile.type !== 'zone') return false;
+    tile.type     = 'empty';
+    tile.zoneType = null;
+    this._restoreColor(tile);
+    this.calculateRoadAccess();
+    return true;
+  }
+
+  /**
    * Mark a tile as non-buildable terrain (called by terrain.js during init).
    * @param {number} x @param {number} z @param {'river'|'forest'|'field'} terrainType
    */

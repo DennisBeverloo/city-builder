@@ -66,6 +66,9 @@ class Car {
     this.state     = 'driving'; // 'driving'|'waiting'|'parked'|'done'
     this.parkTimer = 0;
     this.waitTimer = 0;       // real-ms spent waiting; despawn if exceeds MAX_WAIT_MS
+    this.speed     = 0;      // 0–1 speed multiplier; eases in from rest
+    this.lastDirX  = 1;      // last non-zero travel direction (for lane offset at final tile)
+    this.lastDirZ  = 0;
     this.type      = type;    // 'personal'|'truck'|'police'
     this.elapsedMs = Math.random() * 1000; // stagger police flash
   }
@@ -152,17 +155,21 @@ export class TrafficSystem {
         car.waitTimer += dt;
         if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
         if (!this._isBlocked(car)) { car.state = 'driving'; car.waitTimer = 0; }
-        else continue;
+        else { car.speed = 0; continue; }
       }
 
-      if (this._isBlocked(car)) {
-        car.state    = 'waiting';
-        car.waitTimer = 0;
-        continue;
+      const blocked = this._isBlocked(car);
+      if (blocked) {
+        // Brake smoothly; enter waiting only once fully stopped
+        car.speed = Math.max(0, car.speed - 10.0 * dt / 1000);
+        if (car.speed <= 0) { car.state = 'waiting'; car.waitTimer = 0; continue; }
+      } else {
+        // Accelerate from rest
+        car.speed = Math.min(1.0, car.speed + 5.0 * dt / 1000);
       }
 
-      // Advance position
-      const advance = (carSpeed / 1000) * dt; // tiles per ms → tiles
+      // Advance position at current speed
+      const advance = (carSpeed * car.speed / 1000) * dt;
       car.progress += advance;
 
       while (car.progress >= 1.0 && car.routeIdx < car.route.length - 1) {
@@ -375,8 +382,17 @@ export class TrafficSystem {
     const from = car.route[car.routeIdx];
     const to   = car.route[Math.min(car.routeIdx + 1, car.route.length - 1)];
 
-    const dirX = to.x - from.x;
-    const dirZ = to.z - from.z;
+    let dirX = to.x - from.x;
+    let dirZ = to.z - from.z;
+    // At the final waypoint from===to, preserve last known direction so the car
+    // stays in its lane rather than snapping to the tile centre.
+    if (dirX === 0 && dirZ === 0) {
+      dirX = car.lastDirX;
+      dirZ = car.lastDirZ;
+    } else {
+      car.lastDirX = dirX;
+      car.lastDirZ = dirZ;
+    }
 
     // World positions (tile centre = x+0.5, z+0.5)
     const fx = from.x + 0.5, fz = from.z + 0.5;

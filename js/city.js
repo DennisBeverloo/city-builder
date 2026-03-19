@@ -76,6 +76,7 @@ function _makeInitialState() {
     totalWaterAvailable: 0,
     rciDemand:           { R: 50, C: 30, I: 20 },
     lastMonthNet:        0,
+    lastDayNet:          0,
     totalCommercialJobs:       0,
     totalIndustrialJobs:       0,
     totalCommercialBuildings:  0,
@@ -307,6 +308,7 @@ export class City extends EventEmitter {
     // Daily fraction
     const dailyNet = result.net / 30;
     this._state.money += dailyNet;
+    this._state.lastDayNet = dailyNet;
     this._dailyNetAccum = (this._dailyNetAccum || 0) + dailyNet;
     this._state.lastMonthNet = this._dailyNetAccum * 30; // projected monthly equivalent
   }
@@ -821,6 +823,7 @@ export class City extends EventEmitter {
       if ((def.unlockAtLevel  ?? 1) > level)                          continue;
       if ((def.requires?.power || 0) > 0 && !powerOK)                 continue;
       if ((def.requires?.water || 0) > 0 && !waterOK)                 continue;
+      if (Math.random() > 0.25) continue;
 
       this._grid.placeBuilding(tile.x, tile.z, buildingId);
       this._initCIBuilding(this._grid.getTile(tile.x, tile.z)?.building);
@@ -914,8 +917,6 @@ export class City extends EventEmitter {
           if (!ft) return { success: false, reason: 'Footprint extends out of bounds' };
           if (ft.type === 'terrain' && ft.terrainType !== 'forest')
             return { success: false, reason: 'Footprint overlaps water or terrain' };
-          if (ft.type === 'road')
-            return { success: false, reason: 'Footprint overlaps a road' };
           if (ft.building)
             return { success: false, reason: 'Footprint is already occupied' };
         }
@@ -975,10 +976,26 @@ export class City extends EventEmitter {
 
   demolish(x, z) {
     const tile = this._grid.getTile(x, z);
-    if (!tile)                   return { success: false, reason: 'Invalid tile' };
+    if (!tile)                            return { success: false, reason: 'Invalid tile' };
     if (tile.type === 'terrain' && !tile.isBridge)
-                                 return { success: false, reason: 'Cannot demolish terrain' };
-    if (tile.type === 'empty')   return { success: false, reason: 'Nothing to demolish' };
+                                          return { success: false, reason: 'Cannot demolish terrain' };
+    if (tile.type === 'empty')            return { success: false, reason: 'Nothing to demolish' };
+
+    // Plain road (not a bridge) → remove the road
+    if (tile.type === 'road' && !tile.isBridge) {
+      this._grid.removeRoad(x, z);
+      this._refreshResourceStats();
+      this.emit('stateChanged', this.getState());
+      return { success: true };
+    }
+
+    // Zone tile with no building → dezone
+    if (tile.type === 'zone' && !tile.building) {
+      this._grid.clearZone(x, z);
+      this._refreshResourceStats();
+      this.emit('stateChanged', this.getState());
+      return { success: true };
+    }
 
     // If satellite tile, redirect to anchor so the whole building is removed
     if (tile.building &&

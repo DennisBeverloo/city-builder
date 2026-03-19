@@ -369,13 +369,13 @@ export function initHUD(city) {
 
 function _renderHUD(state, city) {
   _setText('stat-money',    `💰 €${_fmt(state.money)}`);
-  const net = state.lastMonthNet ?? 0;
-  const netEl = document.getElementById('stat-monthly');
+  const dayNet = state.lastDayNet ?? 0;
+  const netEl  = document.getElementById('stat-monthly');
   if (netEl) {
-    netEl.textContent = net >= 0
-      ? `📈 +€${_fmt(net)}/mo`
-      : `📉 -€${_fmt(Math.abs(net))}/mo`;
-    netEl.className   = 'stat ' + (net >= 0 ? 'ok' : 'warning');
+    netEl.textContent = dayNet >= 0
+      ? `📈 +€${_fmt(Math.round(dayNet))}/day`
+      : `📉 -€${_fmt(Math.round(Math.abs(dayNet)))}/day`;
+    netEl.className   = 'stat ' + (dayNet >= 0 ? 'ok' : 'warning');
   }
   _setText('stat-pop',      `👥 ${_fmt(state.population)}`);
 
