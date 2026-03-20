@@ -102,36 +102,48 @@ export function showFinancialModal(city) {
 export function showPopulationModal(city) {
   const d = city.getPopulationDetails();
 
+  // Zone occupation percentages
+  const occ = (bldg, zones) => zones > 0 ? Math.round(bldg / zones * 100) : 0;
+  const rOcc = occ(d.residential.buildings, d.residential.zones);
+  const cOcc = occ(d.commercial.buildings,  d.commercial.zones);
+  const iOcc = occ(d.industrial.buildings,  d.industrial.zones);
+
+  // Zone occupation bar helper
+  const zoneBar = (label, colorCls, fillCls, occ, bldg, zones) => `
+    <div class="zone-occ-row">
+      <span class="zone-occ-label ${colorCls}">${label}</span>
+      <div class="zone-occ-track">
+        <div class="zone-occ-fill ${fillCls}" style="width:${occ}%"></div>
+      </div>
+      <span class="zone-occ-count">${bldg}&thinsp;/&thinsp;${zones} (${occ}%)</span>
+    </div>`;
+
   const html = `
     <section class="modal-section">
       <h3>Overview</h3>
       <table class="modal-table">
         ${tableRow('Total population', d.total)}
-        ${tableRow('Employed',         `${d.employed} (${pct(d.empRate)})`)}
-        ${tableRow('Unemployed',       d.unemployed)}
+        ${tableRow('Adult workers',    d.workers,  'modal-sub-row')}
+        ${tableRow('Shoppers',         d.shoppers, 'modal-sub-row')}
         ${tableRow('Total jobs',       d.totalJobs)}
       </table>
     </section>
     <section class="modal-section">
-      <h3>Zone breakdown</h3>
-      <table class="modal-table">
-        <thead><tr>
-          <th class="modal-label">Zone</th>
-          <th class="modal-value">Tiles zoned</th>
-          <th class="modal-value">Occupied</th>
-        </tr></thead>
-        <tbody>
-          <tr class="zone-r"><td>Residential</td>
-            <td class="modal-value">${d.residential.zones}</td>
-            <td class="modal-value">${d.residential.buildings}</td></tr>
-          <tr class="zone-c"><td>Commercial</td>
-            <td class="modal-value">${d.commercial.zones}</td>
-            <td class="modal-value">${d.commercial.buildings}</td></tr>
-          <tr class="zone-i"><td>Industrial</td>
-            <td class="modal-value">${d.industrial.zones}</td>
-            <td class="modal-value">${d.industrial.buildings}</td></tr>
-        </tbody>
-      </table>
+      <h3>Employment</h3>
+      <div class="emp-bar-track">
+        <div class="emp-bar-employed"   style="width:${d.empRate}%"></div>
+        <div class="emp-bar-unemployed" style="width:${100 - d.empRate}%"></div>
+      </div>
+      <div class="emp-bar-labels">
+        <span class="emp-label-good">▶ ${d.employed} employed (${pct(d.empRate)})</span>
+        <span class="emp-label-bad">◀ ${d.unemployed} unemployed</span>
+      </div>
+    </section>
+    <section class="modal-section">
+      <h3>Zone occupation</h3>
+      ${zoneBar('Residential', 'rci-r-txt', 'zone-occ-r', rOcc, d.residential.buildings, d.residential.zones)}
+      ${zoneBar('Commercial',  'rci-c-txt', 'zone-occ-c', cOcc, d.commercial.buildings,  d.commercial.zones)}
+      ${zoneBar('Industrial',  'rci-i-txt', 'zone-occ-i', iOcc, d.industrial.buildings,  d.industrial.zones)}
     </section>`;
 
   openModal('👥 Population', html);

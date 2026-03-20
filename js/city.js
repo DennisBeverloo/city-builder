@@ -1202,10 +1202,17 @@ export class City extends EventEmitter {
   }
 
   getPopulationDetails() {
-    const stats     = this._grid.getStats();
-    const employed  = Math.min(stats.population, stats.totalJobs);
-    const unemployed = Math.max(0, stats.population - stats.totalJobs);
-    const empRate   = stats.population > 0 ? Math.round(employed / stats.population * 100) : 0;
+    const stats = this._grid.getStats();
+    const tot   = this._rciBreakdown?.totals ?? {};
+
+    // Workers = adults who can work; shoppers = all residents who can buy from C
+    const workers  = Math.round(tot.workers  ?? stats.population * SIMULATION_CONFIG.residentAdultRatio);
+    const shoppers = Math.round(tot.shoppers ?? stats.population);
+
+    // Employment is measured against the adult worker pool, not total population
+    const employed   = Math.min(workers, stats.totalJobs);
+    const unemployed = Math.max(0, workers - stats.totalJobs);
+    const empRate    = workers > 0 ? Math.round(employed / workers * 100) : 0;
 
     let rZones = 0, rBldg = 0, cZones = 0, cBldg = 0, iZones = 0, iBldg = 0;
     for (const t of this._grid.getAllTiles()) {
@@ -1216,7 +1223,8 @@ export class City extends EventEmitter {
     }
 
     return {
-      total: stats.population, employed, unemployed, empRate,
+      total: stats.population, workers, shoppers,
+      employed, unemployed, empRate,
       totalJobs: stats.totalJobs,
       residential: { zones: rZones, buildings: rBldg },
       commercial:  { zones: cZones, buildings: cBldg },
