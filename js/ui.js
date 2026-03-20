@@ -588,6 +588,12 @@ function _refreshDebug() {
   const row  = (label, value, cls = '') =>
     `<div class="dbg-row"><span class="dbg-label">${label}</span><span class="dbg-value ${cls}">${value}</span></div>`;
   const sect = (label) => `<div class="dbg-section">${label}</div>`;
+  // Progress bar for 0-100 percentage values in the debug panel
+  const prow = (label, pct, cls = '') => {
+    const p = Math.max(0, Math.min(100, Math.round(pct)));
+    const barHtml = `<span class="dbg-pbar-wrap"><span class="dbg-pbar-track"><span class="dbg-pbar-fill" style="width:${p}%"></span></span>${p}%</span>`;
+    return `<div class="dbg-row"><span class="dbg-label">${label}</span><span class="dbg-value ${cls}">${barHtml}</span></div>`;
+  };
 
   const bd      = s.rciResult?.breakdown ?? null;
   const tot     = bd?.totals ?? {};
@@ -666,7 +672,7 @@ function _refreshDebug() {
   body.innerHTML = [
     sect('👥 Population'),
     row('Residents',    `${Math.round(stats.population)}`),
-    row('R fill (avg)', `${Math.round((stats.avgRFill ?? 0) * 100)}%`),
+    prow('R fill (avg)', (stats.avgRFill ?? 0) * 100),
 
     sect('💼 Labour Market'),
     row('Workers',          `${workers}`),
@@ -675,7 +681,7 @@ function _refreshDebug() {
     row('Service jobs',     `${serviceJobs}`),
     row('Total jobs',       `${totalJobs}`),
     balanceHtml,
-    row('Labor efficiency', `${Math.round(le * 100)}%`),
+    prow('Labor efficiency', le * 100, le >= 0.80 ? 'dbg-good' : le >= 0.50 ? '' : 'dbg-bad'),
     (() => {
       const n = s.struggling ?? 0;
       if (n === 0) return row('Struggling bldgs', '0');
@@ -687,10 +693,9 @@ function _refreshDebug() {
       return `<div class="dbg-row"><span class="dbg-label">Abandoned bldgs</span><span class="dbg-value dbg-bad">${n}</span></div>`;
     })(),
     (() => {
-      const pct = Math.round((s.laborDemandMultiplier ?? 1) * 100);
-      if (pct >= 100) return row('C/I demand ×', `${pct}%`, 'dbg-good');
-      if (pct >= 60)  return `<div class="dbg-row"><span class="dbg-label">C/I demand ×</span><span class="dbg-value" style="color:#ffd54f">${pct}%</span></div>`;
-      return row('C/I demand ×', `${pct}%`, 'dbg-bad');
+      const pct = (s.laborDemandMultiplier ?? 1) * 100;
+      const cls = pct >= 100 ? 'dbg-good' : pct >= 60 ? '' : 'dbg-bad';
+      return prow('C/I demand ×', pct, cls);
     })(),
 
     sect('🗺️ Zones'),
@@ -708,10 +713,9 @@ function _refreshDebug() {
     row('Water surplus',    `${Math.round(s.totalWaterAvailable - s.totalWaterNeeded)}`,
         s.totalWaterAvailable >= s.totalWaterNeeded ? 'dbg-good' : 'dbg-bad'),
     (() => {
-      const ie = Math.round((s.infraEfficiency ?? 1) * 100);
-      if (ie >= 100) return row('Infra efficiency', `${ie}%`, 'dbg-good');
-      if (ie >= 50)  return `<div class="dbg-row"><span class="dbg-label">Infra efficiency</span><span class="dbg-value" style="color:#ffd54f">${ie}%</span></div>`;
-      return row('Infra efficiency', `${ie}%`, 'dbg-bad');
+      const ie = (s.infraEfficiency ?? 1) * 100;
+      const cls = ie >= 100 ? 'dbg-good' : ie >= 50 ? '' : 'dbg-bad';
+      return prow('Infra efficiency', ie, cls);
     })(),
 
     sect('📊 RCI Demand'),
@@ -723,6 +727,15 @@ function _refreshDebug() {
 }
 
 // ── Info Panel ───────────────────────────────────────────────────────────────
+
+/**
+ * Render a small 0–100 progress bar with the numeric value alongside.
+ * Used for Land Value and Desirability rows in the info panel.
+ */
+function _pbar(value) {
+  const pct = Math.max(0, Math.min(100, Math.round(value ?? 0)));
+  return `<span class="info-pbar-wrap"><span class="info-pbar-track"><span class="info-pbar-fill" style="width:${pct}%"></span></span>${pct}</span>`;
+}
 
 /**
  * Display tile info in the top-right panel.
@@ -759,8 +772,8 @@ export function showTileInfo(tile) {
     rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
     rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
     rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
-    rows.push(['🏡 Land Value',    Math.round(tile.landValue)]);
-    rows.push(['⭐ Desirability',  Math.round(tile.desirability)]);
+    rows.push(['🏡 Land Value',    _pbar(tile.landValue)]);
+    rows.push(['⭐ Desirability',  _pbar(tile.desirability)]);
   } else if (tile.building) {
     const b   = tile.building;
     const def = b.def;
@@ -791,14 +804,14 @@ export function showTileInfo(tile) {
       const avgDesirability = plotTiles.reduce((s, pt) => s + (pt.desirability ?? 0), 0) / plotTiles.length;
       rows.push(['😊 Happiness',   `${Math.round(avgHappiness)}%`]);
       rows.push(['🏭 Pollution',   avgPollution <= 20 ? 'Low' : avgPollution <= 50 ? 'Medium' : 'High']);
-      rows.push(['🏡 Land Value',  Math.round(avgLandValue)]);
-      rows.push(['⭐ Desirability', Math.round(avgDesirability)]);
+      rows.push(['🏡 Land Value',  _pbar(avgLandValue)]);
+      rows.push(['⭐ Desirability', _pbar(avgDesirability)]);
     } else {
       rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
       rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
       rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
-      rows.push(['🏡 Land Value',    Math.round(tile.landValue)]);
-      rows.push(['⭐ Desirability',  Math.round(tile.desirability)]);
+      rows.push(['🏡 Land Value',    _pbar(tile.landValue)]);
+      rows.push(['⭐ Desirability',  _pbar(tile.desirability)]);
     }
     if (def.description) rows.push(['Info', def.description]);
   }

@@ -290,6 +290,52 @@ html, body {
 #info-panel-body .label { color: #888; }
 #info-panel-body .value { color: #ddd; font-weight: 500; }
 
+/* Progress bars — info panel (land value / desirability) */
+.info-pbar-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #ddd;
+  font-weight: 500;
+}
+.info-pbar-track {
+  display: inline-block;
+  width: 64px;
+  height: 7px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.info-pbar-fill {
+  display: block;
+  height: 100%;
+  background: #4caf50;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Progress bars — debug panel */
+.dbg-pbar-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.dbg-pbar-track {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  background: #222;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dbg-pbar-fill {
+  display: block;
+  height: 100%;
+  background: #4caf50;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
 /* ── Notification toast ── */
 #notification {
   position: fixed;
@@ -344,7 +390,7 @@ html, body {
   position: fixed;
   top: 10px;
   left: 10px;
-  width: 200px;
+  width: 260px;
   background: rgba(8, 8, 20, 0.92);
   border: 1px solid #444;
   border-radius: 6px;

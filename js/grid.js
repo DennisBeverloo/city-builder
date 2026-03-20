@@ -572,11 +572,11 @@ export class Grid {
     for (const t of this.getAllTiles()) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.20;
-      score += sc.fire      * 0.20;
-      score += sc.hospital  * 0.30;
+      score += sc.police    * 0.38;   // ↑ was 0.20
+      score += sc.fire      * 0.35;   // ↑ was 0.20
+      score += sc.hospital  * 0.50;   // ↑ was 0.30
       score += sc.education * 0.50;
-      score += sc.parks     * 0.45;
+      score += sc.parks     * 0.60;   // ↑ was 0.45 — sports fields big land-value boost
       score -= t.pollution  * 0.40;
       score += t.happiness  * 0.12;
       t.desirability = Math.max(0, Math.min(100, score));
@@ -591,9 +591,9 @@ export class Grid {
     for (const t of this.getAllTiles()) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.28;
-      score += sc.fire      * 0.25;
-      score += sc.hospital  * 0.60;
+      score += sc.police    * 0.55;   // ↑ was 0.28 — police presence clearly felt
+      score += sc.fire      * 0.50;   // ↑ was 0.25 — fire safety reassurance
+      score += sc.hospital  * 0.90;   // ↑ was 0.60 — healthcare is biggest happiness driver
       score += sc.education * 0.65;
       score += sc.parks     * 0.80;
       score -= t.pollution  * 0.50;
@@ -621,8 +621,9 @@ export class Grid {
       }
     }
 
-    // 4a-ii: Parks, tennis courts and football fields reduce nearby pollution
-    const PARK_IDS = new Set(['park_small','park_medium','park_large','tennis_court','football_field']);
+    // 4a-ii: Parks reduce nearby pollution (sports fields excluded — their radius
+    //        is far too large and they don't logically clean the air)
+    const PARK_IDS = new Set(['park_small','park_medium','park_large']);
     for (const t of tiles) {
       if (!t.building || !PARK_IDS.has(t.building.id)) continue;
       if (t.x !== t.building.tileX || t.z !== t.building.tileZ) continue;
@@ -639,11 +640,11 @@ export class Grid {
     for (const t of tiles) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.20;
-      score += sc.fire      * 0.20;
-      score += sc.hospital  * 0.30;
+      score += sc.police    * 0.38;   // ↑ was 0.20
+      score += sc.fire      * 0.35;   // ↑ was 0.20
+      score += sc.hospital  * 0.50;   // ↑ was 0.30
       score += sc.education * 0.50;
-      score += sc.parks     * 0.45;
+      score += sc.parks     * 0.60;   // ↑ was 0.45 — sports fields big land-value boost
       score -= t.pollution  * 0.40;
       score += t.happiness  * 0.12;
       t.desirability = Math.max(0, Math.min(100, score));

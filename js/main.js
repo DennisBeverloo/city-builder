@@ -708,6 +708,15 @@ window.addEventListener('keydown', (e) => {
       }
       break;
     }
+    case 'r':
+    case 'R': {
+      // Select road tool
+      const roadBtn = document.querySelector('button[data-building="road"]');
+      if (roadBtn && !roadBtn.classList.contains('locked')) {
+        roadBtn.click();
+      }
+      break;
+    }
     case ' ':
       e.preventDefault();
       city.togglePause();
