@@ -1022,10 +1022,15 @@ export class City extends EventEmitter {
   }
 
   getPopulationDetails() {
-    const stats     = this._grid.getStats();
-    const employed  = Math.min(stats.population, stats.totalJobs);
+    const stats      = this._grid.getStats();
+    const employed   = Math.min(stats.population, stats.totalJobs);
     const unemployed = Math.max(0, stats.population - stats.totalJobs);
-    const empRate   = stats.population > 0 ? Math.round(employed / stats.population * 100) : 0;
+    const empRate    = stats.population > 0 ? Math.round(employed / stats.population * 100) : 0;
+
+    // Workers = residents who participate in the labour market; shoppers from RCI totals
+    const totals  = this._rciBreakdown?.totals ?? {};
+    const workers  = Math.round(totals.workers  ?? stats.population);
+    const shoppers = Math.round(totals.shoppers ?? 0);
 
     let rZones = 0, rBldg = 0, cZones = 0, cBldg = 0, iZones = 0, iBldg = 0;
     for (const t of this._grid.getAllTiles()) {
@@ -1036,7 +1041,8 @@ export class City extends EventEmitter {
     }
 
     return {
-      total: stats.population, employed, unemployed, empRate,
+      total: stats.population, workers, shoppers,
+      employed, unemployed, empRate,
       totalJobs: stats.totalJobs,
       residential: { zones: rZones, buildings: rBldg },
       commercial:  { zones: cZones, buildings: cBldg },

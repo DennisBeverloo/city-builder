@@ -42,9 +42,14 @@ function tableRow(label, value, cls = '') {
 
 function modifierRow(m) {
   const cls = m.good ? 'mod-good' : 'mod-bad';
-  const val = typeof m.value === 'number'
-    ? (m.value >= 0 ? `+${m.value}` : `${m.value}`)
-    : m.value;
+  let val;
+  if (m.value !== undefined && m.value !== null) {
+    val = typeof m.value === 'number'
+      ? (m.value >= 0 ? `+${m.value}` : `${m.value}`)
+      : m.value;
+  } else {
+    val = m.good ? '✅' : '❌';
+  }
   return `
     <tr class="modifier-row ${cls}">
       <td class="modal-label">${m.label}</td>
@@ -99,38 +104,55 @@ export function showFinancialModal(city) {
 
 // ── Population modal ──────────────────────────────────────────────────────────
 
+function _zoneBar(buildings, zones) {
+  const fill = zones > 0 ? Math.round(buildings / zones * 100) : 0;
+  return `<span class="pop-zone-bar-wrap">
+    <span class="pop-zone-bar-track">
+      <span class="pop-zone-bar-fill" style="width:${fill}%"></span>
+    </span>
+    <span class="pop-zone-bar-label">${buildings}/${zones}</span>
+  </span>`;
+}
+
 export function showPopulationModal(city) {
   const d = city.getPopulationDetails();
+
+  // Employment progress bar: green (employed) from left, red (unemployed) from right
+  const greenW = d.empRate;
+  const redW   = 100 - greenW;
+  const empBar = `
+    <div class="pop-emp-bar-wrap">
+      <span class="pop-emp-green" style="width:${greenW}%"></span>
+      <span class="pop-emp-red"   style="width:${redW}%"></span>
+    </div>
+    <div class="pop-emp-legend">
+      <span style="color:#81c784">● ${d.employed} employed</span>
+      <span style="color:#e57373">● ${d.unemployed} unemployed</span>
+      <span style="color:#888">${d.totalJobs} jobs total</span>
+    </div>`;
 
   const html = `
     <section class="modal-section">
       <h3>Overview</h3>
       <table class="modal-table">
         ${tableRow('Total population', d.total)}
-        ${tableRow('Employed',         `${d.employed} (${pct(d.empRate)})`)}
-        ${tableRow('Unemployed',       d.unemployed)}
-        ${tableRow('Total jobs',       d.totalJobs)}
+        ${tableRow('Workers',  d.workers)}
+        ${tableRow('Shoppers', d.shoppers)}
       </table>
     </section>
     <section class="modal-section">
-      <h3>Zone breakdown</h3>
+      <h3>Employment</h3>
+      ${empBar}
+    </section>
+    <section class="modal-section">
+      <h3>Zone occupancy</h3>
       <table class="modal-table">
-        <thead><tr>
-          <th class="modal-label">Zone</th>
-          <th class="modal-value">Tiles zoned</th>
-          <th class="modal-value">Occupied</th>
-        </tr></thead>
-        <tbody>
-          <tr class="zone-r"><td>Residential</td>
-            <td class="modal-value">${d.residential.zones}</td>
-            <td class="modal-value">${d.residential.buildings}</td></tr>
-          <tr class="zone-c"><td>Commercial</td>
-            <td class="modal-value">${d.commercial.zones}</td>
-            <td class="modal-value">${d.commercial.buildings}</td></tr>
-          <tr class="zone-i"><td>Industrial</td>
-            <td class="modal-value">${d.industrial.zones}</td>
-            <td class="modal-value">${d.industrial.buildings}</td></tr>
-        </tbody>
+        <tr class="zone-r"><td class="modal-label">🏠 Residential</td>
+          <td>${_zoneBar(d.residential.buildings, d.residential.zones)}</td></tr>
+        <tr class="zone-c"><td class="modal-label">🏪 Commercial</td>
+          <td>${_zoneBar(d.commercial.buildings, d.commercial.zones)}</td></tr>
+        <tr class="zone-i"><td class="modal-label">🏭 Industrial</td>
+          <td>${_zoneBar(d.industrial.buildings, d.industrial.zones)}</td></tr>
       </table>
     </section>`;
 

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" diff HEAD js/scene.js js/grid.js)",
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" log --oneline -3)",
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" show 867a39c --stat)",
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" show 867a39c -- js/grid.js)",
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" add js/scene.js js/grid.js)",
+      "Bash(git -C:*)",
+      "Bash(git -C \"C:/Users/dbeve/source/repos/city-builder\" push)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(where npx:*)",
+      "Bash(where node:*)",
+      "Bash(find C:/Users/dbeve/source/repos/city-builder -name *.js -not -path */.claude/* -not -path */node_modules/*)"
+    ]
+  }
+}

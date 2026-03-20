@@ -501,6 +501,67 @@ html, body {
   margin-top: 8px;
 }
 
+/* ── Population modal bars ── */
+
+/* Employment split bar (green left / red right) */
+.pop-emp-bar-wrap {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #1a1a2a;
+  margin-bottom: 6px;
+}
+.pop-emp-green {
+  display: block;
+  height: 100%;
+  background: #388e3c;
+  transition: width 0.3s;
+}
+.pop-emp-red {
+  display: block;
+  height: 100%;
+  background: #c62828;
+  transition: width 0.3s;
+}
+.pop-emp-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #888;
+  flex-wrap: wrap;
+}
+
+/* Zone occupancy progress bars */
+.pop-zone-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.pop-zone-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #1a1a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pop-zone-bar-fill {
+  display: block;
+  height: 100%;
+  background: #4a7c59;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.pop-zone-bar-label {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  min-width: 40px;
+  text-align: right;
+}
+
 /* ── Speed controls (bottom bar) ── */
 .speed-group {
   display: flex;
