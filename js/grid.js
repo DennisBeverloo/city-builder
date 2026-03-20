@@ -132,10 +132,16 @@ export class Grid {
   }
 
   _setTileColor(tile, color) {
-    // Update the existing material colour in-place — avoids allocating a new
-    // MeshLambertMaterial on every paint operation (was a major memory leak and
-    // prevented Three.js from batching tiles with the same material).
-    tile.mesh.material.color.setHex(color);
+    // Road tiles share a single MeshLambertMaterial (with canvas texture) per
+    // connectivity pattern — mutating it in-place would corrupt every road tile
+    // that shares the same material object.  Give this tile a temporary
+    // individual material instead; _restoreColor puts _roadMat back afterwards.
+    if (tile._roadMat && tile.mesh.material === tile._roadMat) {
+      tile.mesh.material = new THREE.MeshLambertMaterial({ color });
+    } else {
+      // Per-tile material — safe to update colour in-place (no allocation).
+      tile.mesh.material.color.setHex(color);
+    }
   }
 
   _restoreColor(tile) {
