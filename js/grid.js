@@ -565,6 +565,25 @@ export class Grid {
 
     // Immediate per-tile happiness refresh (section 4d, uses current pollution)
     this._applyTileHappiness();
+
+    // Immediately recompute desirability so heatmap/info panel reflects new
+    // service coverage without waiting for next month-end.
+    // Also bootstraps landValue on fresh or freshly-loaded games (where it is 0).
+    for (const t of this.getAllTiles()) {
+      const sc = t.serviceCoverage;
+      let score = 50;
+      score += sc.police    * 0.20;
+      score += sc.fire      * 0.20;
+      score += sc.hospital  * 0.30;
+      score += sc.education * 0.50;
+      score += sc.parks     * 0.45;
+      score -= t.pollution  * 0.40;
+      score += t.happiness  * 0.12;
+      t.desirability = Math.max(0, Math.min(100, score));
+      // Snap landValue to desirability when uninitialised (new game or after load).
+      // The monthly tick will apply the normal 10%/month lag from here on.
+      if (t.landValue < 1) t.landValue = t.desirability;
+    }
   }
 
   /** Section 4d: compute per-tile happiness from serviceCoverage + pollution. */
