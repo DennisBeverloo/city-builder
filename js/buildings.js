@@ -1024,9 +1024,9 @@ function _createPoliceStation(def) {
   // Door frames
   addBox(g, 0.56, 0.42, 0.010, -0.42, yBot + 0.22, 0.864, frameMat);
   addBox(g, 0.56, 0.42, 0.010,  0.42, yBot + 0.22, 0.864, frameMat);
-  // Police badge (gold disc on main roof)
-  addCyl(g, 0.20, 0.20, 0.025, 0, yBot + 0.845, -0.20, M.gold, 12);
-  addCyl(g, 0.10, 0.10, 0.030, 0, yBot + 0.875, -0.20, cachedMat(0xe65100), 12);
+  // Police badge (gold disc on top of upper story, above yBot+1.12)
+  addCyl(g, 0.22, 0.22, 0.028, 0, yBot + 1.15, -0.20, M.gold, 12);
+  addCyl(g, 0.11, 0.11, 0.032, 0, yBot + 1.18, -0.20, cachedMat(0xe65100), 12);
   // Entrance step
   addBox(g, 0.40, 0.04, 0.16, 0, yBot + 0.04, 0.25, cachedMat(0xbdbdbd));
   // Entrance door
@@ -1069,9 +1069,9 @@ function _createFireStation(def) {
   addBox(g, 0.52, 0.38, 0.014,  0.42, yBot + 0.22, 0.868, M.garageDark);
   addBox(g, 0.56, 0.42, 0.010, -0.42, yBot + 0.22, 0.864, frameMat);
   addBox(g, 0.56, 0.42, 0.010,  0.42, yBot + 0.22, 0.864, frameMat);
-  // Fire emblem: red disc + gold disc
-  addCyl(g, 0.22, 0.22, 0.025, 0, yBot + 0.845, -0.20, M.fireRed, 12);
-  addCyl(g, 0.10, 0.10, 0.030, 0, yBot + 0.875, -0.20, M.gold, 12);
+  // Fire emblem: red disc + gold disc — on top of upper section (above yBot+1.10)
+  addCyl(g, 0.24, 0.24, 0.028, 0, yBot + 1.13, -0.20, M.fireRed, 12);
+  addCyl(g, 0.11, 0.11, 0.032, 0, yBot + 1.16, -0.20, M.gold, 12);
   // Red accent corner strips
   addBox(g, 0.04, 0.82, 0.04,  0.86, yBot + 0.41, -0.76, accentMat);
   addBox(g, 0.04, 0.82, 0.04, -0.86, yBot + 0.41, -0.76, accentMat);
@@ -1106,10 +1106,10 @@ function _createHospital(def) {
   addBox(g, bboxW - 0.20, 0.36, bboxD - 0.10, 0, yBot + 1.58, 0, wingMat);
   // Flat roof
   addBox(g, bboxW, 0.05, bboxD, 0, yBot + 1.425, 0, roofMat);
-  // Red cross on roof — raised well above roof so it's visible from isometric view
-  const crossY = yBot + 1.56;
-  addBox(g, 0.80, 0.10, 0.26, 0, crossY, 0, M.fireRed);
-  addBox(g, 0.26, 0.10, 0.80, 0, crossY, 0, M.fireRed);
+  // Red cross on roof — above upper floor (top = yBot+1.76), clearly visible
+  const crossY = yBot + 1.83;
+  addBox(g, 0.90, 0.12, 0.28, 0, crossY, 0, M.fireRed);
+  addBox(g, 0.28, 0.12, 0.90, 0, crossY, 0, M.fireRed);
   // Entrance canopy (south)
   addBox(g, 0.60, 0.06, 0.20, 0, yBot + 0.80, bboxD / 2 + 0.10, accentMat);
   // Entrance door
