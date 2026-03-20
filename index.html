@@ -67,9 +67,14 @@
       <button data-tool="building" data-building="primary_school"   title="Primary School | Cost: 1000 | Upkeep: 150/mo">School</button>
       <button data-tool="building" data-building="high_school"      title="High School | Cost: 2000 | Upkeep: 250/mo | Lvl 2" class="locked">H.School</button>
       <button data-tool="building" data-building="university"       title="University | Cost: 5000 | Upkeep: 600/mo | Lvl 3" class="locked">Uni</button>
-      <button data-tool="building" data-building="park_small"       title="Small Park | Cost: 300 | Upkeep: 30/mo">Park S</button>
-      <button data-tool="building" data-building="park_medium"      title="Medium Park | Cost: 800 | Upkeep: 70/mo | Lvl 2" class="locked">Park M</button>
-      <button data-tool="building" data-building="park_large"       title="Large Park | Cost: 2000 | Upkeep: 150/mo | Lvl 3" class="locked">Park L</button>
+    </div>
+    <div class="toolbar-group" id="group-leisure">
+      <span class="toolbar-label">Leisure</span>
+      <button data-tool="building" data-building="park_small"       title="Small Park | Cost: 1000 | Upkeep: 200/mo | +8 happiness">Park S</button>
+      <button data-tool="building" data-building="park_medium"      title="Medium Park | Cost: 3000 | Upkeep: 500/mo | Lvl 2 | +10 happiness" class="locked">Park M</button>
+      <button data-tool="building" data-building="park_large"       title="Large Park | Cost: 8000 | Upkeep: 1200/mo | Lvl 3 | +20 happiness" class="locked">Park L</button>
+      <button data-tool="building" data-building="tennis_court"     title="Tennis Court | Cost: 2000 | Upkeep: 200/mo | +8 happiness">Tennis</button>
+      <button data-tool="building" data-building="football_field"   title="Football Field | Cost: 4000 | Upkeep: 400/mo | Lvl 2 | +14 happiness" class="locked">Football</button>
     </div>
     <div class="toolbar-group">
       <span class="toolbar-label">Infra</span>
@@ -94,7 +99,7 @@
     <div class="stat" id="stat-power">⚡ 0/0 kW</div>
     <div class="stat" id="stat-water">💧 0/0</div>
     <div class="stat" id="stat-happiness">😊 50%</div>
-    <div class="stat" id="stat-level">🏙️ Lvl 1</div>
+    <div class="stat" id="stat-level" style="cursor:pointer;">🏙️ Lvl 1</div>
     <div class="stat" id="stat-date">📅 Day 1</div>
     <div class="rci-bars">
       <div class="rci-bar-wrap" id="rci-bar-r" title="R: 50%">
@@ -120,8 +125,11 @@
       <div class="pause-divider"></div>
       <button id="btn-save-expand" class="pause-btn">💾 Save Game ▾</button>
       <div id="save-slots" class="slot-picker hidden"></div>
+      <button id="btn-save-file" class="pause-btn pause-secondary">⬇ Download Save</button>
       <button id="btn-load-expand" class="pause-btn">📂 Load Game ▾</button>
       <div id="load-slots" class="slot-picker hidden"></div>
+      <button id="btn-load-file" class="pause-btn pause-secondary">⬆ Upload Save</button>
+      <input id="save-file-input" type="file" accept=".json" style="display:none">
       <div class="pause-divider"></div>
       <button id="btn-resume" class="pause-btn pause-primary">▶ Resume</button>
       <button id="btn-new-game" class="pause-btn">🔄 New Game</button>

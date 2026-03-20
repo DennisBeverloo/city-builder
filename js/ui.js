@@ -168,10 +168,12 @@ function _applyButtonLabels(toolbar) {
  */
 function _initFlyoutGroups(toolbar) {
   const servicesGroup = document.getElementById('group-services');
+  const leisureGroup  = document.getElementById('group-leisure');
   // Infra group has no id — find it by the road button it contains.
   const infraGroup = toolbar.querySelector('[data-building="road"]')?.closest('.toolbar-group');
 
   if (servicesGroup) _makeFlyout(servicesGroup, '🏛️', 'Services', 'flyout-services');
+  if (leisureGroup)  _makeFlyout(leisureGroup,  '🌳', 'Leisure',  'flyout-leisure');
   if (infraGroup)    _makeFlyout(infraGroup,    '🏗️', 'Infra',    'flyout-infra');
 
   // Click anywhere outside a flyout or its toggle closes all open flyouts.
@@ -375,6 +377,58 @@ export function initHUD(city) {
     'Start: place a Diesel Generator + Small Water Pump, zone R areas, connect with roads.',
     'info', 8000
   ), 3000);
+
+  // ── City level hover tooltip ─────────────────────────────────────
+  const _lvlEl  = document.getElementById('stat-level');
+  const _lvlTip = document.createElement('div');
+  _lvlTip.id = 'level-tooltip';
+  _lvlTip.className = 'level-tooltip hidden';
+  document.body.appendChild(_lvlTip);
+
+  function _updateLevelTooltip() {
+    const state    = city.getState();
+    const level    = state.cityLevel ?? 1;
+    const pop      = state.population ?? 0;
+    const thresholds = [0, 500, 1500, 3000, 6000, 12000, 25000, 50000, 100000, 250000];
+    const nextIdx  = level; // thresholds[level] is the pop needed for current level; thresholds[level+1] for next
+    const nextPop  = thresholds[nextIdx] ?? null;
+    const prevPop  = thresholds[nextIdx - 1] ?? 0;
+
+    let html = `<div class="lvlt-title">🏙️ City Level ${level}</div>`;
+    html += `<div class="lvlt-pop">Population: <b>${pop.toLocaleString()}</b></div>`;
+
+    if (nextPop !== null) {
+      const progress = Math.min(1, (pop - prevPop) / Math.max(1, nextPop - prevPop));
+      const pct      = Math.round(progress * 100);
+      html += `<div class="lvlt-next">Next level at <b>${nextPop.toLocaleString()}</b> residents</div>`;
+      html += `<div class="lvlt-bar-wrap"><div class="lvlt-bar" style="width:${pct}%"></div></div>`;
+      html += `<div class="lvlt-pct">${pct}% to Level ${level + 1}</div>`;
+    } else {
+      html += `<div class="lvlt-next">Maximum level reached!</div>`;
+    }
+
+    html += `<div class="lvlt-divider"></div><div class="lvlt-levels">`;
+    const names = ['Village','Town','Small City','City','Large City','Metropolis','Megalopolis','Megacity','Global City','World Capital'];
+    thresholds.forEach((t, i) => {
+      const done = i < level;
+      const cur  = i === level - 1;
+      html += `<div class="lvlt-row ${done ? 'done' : ''} ${cur ? 'cur' : ''}">`;
+      html += `<span>Lvl ${i + 1} — ${names[i] ?? '???'}</span><span>${t === 0 ? 'Start' : t.toLocaleString() + ' pop'}</span>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+    _lvlTip.innerHTML = html;
+  }
+
+  _lvlEl.addEventListener('mouseenter', e => {
+    _updateLevelTooltip();
+    _lvlTip.classList.remove('hidden');
+    const r = _lvlEl.getBoundingClientRect();
+    _lvlTip.style.left   = `${r.left}px`;
+    _lvlTip.style.bottom = `${window.innerHeight - r.top + 8}px`;
+  });
+  _lvlEl.addEventListener('mouseleave', () => _lvlTip.classList.add('hidden'));
+  city.on('stateChanged', () => { if (!_lvlTip.classList.contains('hidden')) _updateLevelTooltip(); });
 }
 
 function _renderHUD(state, city) {
@@ -931,6 +985,47 @@ export function initPauseMenu(city) {
   document.getElementById('pause-overlay')?.addEventListener('click', e => {
     if (e.target.id === 'pause-overlay') _hidePauseMenu(city);
   });
+
+  // ── Download / Upload save file ───────────────────────────────
+  const btnDownload = document.getElementById('btn-save-file');
+  const btnUpload   = document.getElementById('btn-load-file');
+  const fileInput   = document.getElementById('save-file-input');
+
+  if (btnDownload) {
+    btnDownload.addEventListener('click', () => {
+      const info = city.getSaveInfo(1) || city.getSaveInfo(2) || city.getSaveInfo(3);
+      if (!info?.exists) { alert('No save found to download.'); return; }
+      // Find most recent save
+      let bestSlot = 1;
+      [1, 2, 3].forEach(s => {
+        const si = city.getSaveInfo(s);
+        if (si?.exists) bestSlot = s;
+      });
+      const data = city.exportSave(bestSlot);
+      if (!data) return;
+      const blob = new Blob([data], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `citybuilder_save.json`; a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  if (btnUpload && fileInput) {
+    btnUpload.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const result = city.importSave(text);
+      if (!result.success) {
+        alert(result.error || 'Failed to load save file.');
+      } else {
+        document.getElementById('pause-overlay').classList.add('hidden');
+      }
+      fileInput.value = '';
+    });
+  }
 }
 
 function _showPauseMenu(city) {

@@ -711,6 +711,17 @@ html, body {
   border-color: #6a7acc;
 }
 
+.pause-secondary {
+  background: #1e2a3a;
+  border-color: #3a5070;
+  color: #80b0d0;
+  font-size: 0.82em;
+}
+.pause-secondary:hover {
+  background: #263444;
+  border-color: #4a6080;
+}
+
 .pause-danger {
   background: #3a1a1a;
   border-color: #7a3030;
@@ -864,3 +875,30 @@ html, body {
   20%  { opacity: 1; transform: translate(-50%, -80%); }
   100% { opacity: 0; transform: translate(-50%, -200%); }
 }
+
+/* ── City level tooltip ── */
+.level-tooltip {
+  position: fixed;
+  z-index: 600;
+  background: rgba(6, 8, 18, 0.96);
+  border: 1px solid #4a9eff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 240px;
+  font-size: 12px;
+  color: #cce4ff;
+  box-shadow: 0 0 16px rgba(74,158,255,0.2);
+  pointer-events: none;
+}
+.level-tooltip.hidden { display: none; }
+.lvlt-title  { font-size: 14px; font-weight: bold; color: #7ec8ff; margin-bottom: 6px; }
+.lvlt-pop    { margin-bottom: 4px; }
+.lvlt-next   { color: #aac8ff; margin-bottom: 6px; font-size: 11px; }
+.lvlt-bar-wrap { background: #1a2a3a; border-radius: 4px; height: 8px; margin-bottom: 4px; overflow: hidden; }
+.lvlt-bar    { height: 100%; background: linear-gradient(90deg, #2266cc, #4a9eff); border-radius: 4px; transition: width 0.3s; }
+.lvlt-pct    { font-size: 11px; color: #7ec8ff; margin-bottom: 8px; }
+.lvlt-divider { border-top: 1px solid #1e3050; margin: 6px 0; }
+.lvlt-levels  { font-size: 10px; line-height: 1.8; }
+.lvlt-row    { display: flex; justify-content: space-between; color: #556677; }
+.lvlt-row.done { color: #4488aa; }
+.lvlt-row.cur  { color: #7ec8ff; font-weight: bold; }

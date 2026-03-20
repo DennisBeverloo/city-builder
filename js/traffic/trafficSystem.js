@@ -26,7 +26,7 @@ const CAR_Y_OFFSET = 0.072;
 const MAX_CARS = 150;
 
 /** Parked duration range [min, max] in real milliseconds. */
-const PARK_MS = [1500, 3500];
+const PARK_MS = [600, 1200];
 
 /** Police patrol random walk length (tiles). */
 const PATROL_LENGTH = 25;
@@ -546,8 +546,14 @@ export class TrafficSystem {
     // Lane offset: right of direction of travel
     // right = (-dirZ, dirX) in XZ when dirX/Z are unit cardinal
     const sign   = this._leftHand ? -1 : 1;
-    const laneX  = -dirZ * LANE_OFFSET * sign;
-    const laneZ  =  dirX * LANE_OFFSET * sign;
+    // On the last route tile, glide toward the curb as the car slows to park
+    let parkDrift = 0;
+    if (car.routeIdx >= car.route.length - 1) {
+      parkDrift = Math.min(1, Math.max(0, (car.progress - 0.55) / 0.45));
+    }
+    const effectiveLane = LANE_OFFSET + parkDrift * (0.34 - LANE_OFFSET);
+    const laneX  = -dirZ * effectiveLane * sign;
+    const laneZ  =  dirX * effectiveLane * sign;
 
     car.mesh.position.set(px + laneX, CAR_Y_OFFSET, pz + laneZ);
 

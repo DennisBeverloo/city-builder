@@ -519,6 +519,8 @@ export class Grid {
       park_small:     { field: 'parks',     strength: 15 },
       park_medium:    { field: 'parks',     strength: 38 },
       park_large:     { field: 'parks',     strength: 65 },
+      tennis_court:   { field: 'parks', strength: 35 },
+      football_field: { field: 'parks', strength: 50 },
     };
   }
 
@@ -606,10 +608,11 @@ export class Grid {
       let score = 50;
       score += sc.police    * 0.10;
       score += sc.fire      * 0.10;
-      score += sc.hospital  * 0.15;
-      score += sc.education * 0.15;
+      score += sc.hospital  * 0.18;
+      score += sc.education * 0.22;  // schools & unis raise land value noticeably
+      score += sc.parks     * 0.28;  // parks & sports directly raise desirability
       score -= t.pollution  * 0.40;
-      score += t.happiness  * 0.10;   // previous tick's happiness baked in
+      score += t.happiness  * 0.10;
       t.desirability = Math.max(0, Math.min(100, score));
     }
 

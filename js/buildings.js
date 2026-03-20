@@ -122,6 +122,24 @@ export const BUILDINGS = {
     color: 0x388e3c, height: 0.3,
     unlockAtLevel: 3, description: '+20 happiness, radius 12. 6 jobs.',
   },
+    tennis_court: {
+      id: 'tennis_court', name: 'Tennis Court',
+      category: 'service', size: [2, 2],
+      cost: 2000, monthlyUpkeep: 200,
+      provides: { happiness: 8, radius: 5, jobs: 2 },
+      requires: {},
+      color: 0x4db6ac, height: 0.02,
+      unlockAtLevel: 1, description: '+8 happiness in radius 5. 2 jobs.',
+    },
+    football_field: {
+      id: 'football_field', name: 'Football Field',
+      category: 'service', size: [3, 2],
+      cost: 4000, monthlyUpkeep: 400,
+      provides: { happiness: 14, radius: 7, jobs: 4 },
+      requires: {},
+      color: 0x2e7d32, height: 0.02,
+      unlockAtLevel: 2, description: '+14 happiness in radius 7. 4 jobs.',
+    },
 
   // ── Infrastructure ───────────────────────────────────────────────
   road: {
@@ -1222,6 +1240,91 @@ function _createParkLarge(def) {
   return g;
 }
 
+function _createTennisCourt(def) {
+  const g = new THREE.Group();
+  const y = def.height / 2;
+
+  // Court surface — teal/green clay
+  const courtMat = cachedMat(0x26a69a);
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.01, 1.74), courtMat), { position: new THREE.Vector3(0, y, 0) }));
+
+  // White boundary lines
+  const lineMat = cachedMat(0xffffff);
+  const hLine = (lx, lz, lw, ll) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.012, ll), lineMat);
+    m.position.set(lx, y + 0.006, lz); g.add(m);
+  };
+  // Outer boundary
+  hLine( 0,  0.82, 1.60, 0.02); hLine( 0, -0.82, 1.60, 0.02); // baselines
+  hLine( 0.79, 0, 0.02, 1.64); hLine(-0.79, 0, 0.02, 1.64);   // sidelines
+  // Service boxes
+  hLine( 0, 0.41, 1.60, 0.02); hLine( 0, -0.41, 1.60, 0.02);  // service lines
+  hLine( 0, 0, 0.02, 1.64);                                     // centre line
+  // Net (white bar + thin posts)
+  const netMat = cachedMat(0xe0e0e0);
+  const netMesh = new THREE.Mesh(new THREE.BoxGeometry(1.70, 0.06, 0.02), netMat);
+  netMesh.position.set(0, y + 0.04, 0); g.add(netMesh);
+  [-0.85, 0.85].forEach(px => {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.10, 0.02), cachedMat(0x888888));
+    post.position.set(px, y + 0.06, 0); g.add(post);
+  });
+  return g;
+}
+
+function _createFootballField(def) {
+  const g = new THREE.Group();
+  const y = def.height / 2;
+  const W = 2.78, D = 1.78;
+
+  // Pitch surface — dark green
+  const pitchMat = cachedMat(0x2e7d32);
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(W, 0.01, D), pitchMat), { position: new THREE.Vector3(0, y, 0) }));
+
+  // Alternating lighter stripes (subtle)
+  const stripeMat = cachedMat(0x388e3c);
+  for (let i = -1; i <= 1; i += 2) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.012, D), stripeMat);
+    s.position.set(i * 0.69, y + 0.006, 0); g.add(s);
+  }
+
+  // White markings
+  const lm = cachedMat(0xffffff);
+  const line = (lx, lz, lw, ll) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.015, ll), lm);
+    m.position.set(lx, y + 0.008, lz); g.add(m);
+  };
+  // Outer boundary
+  line(0,  D/2 - 0.01, W - 0.04, 0.02);
+  line(0, -D/2 + 0.01, W - 0.04, 0.02);
+  line( W/2 - 0.01, 0, 0.02, D - 0.04);
+  line(-W/2 + 0.01, 0, 0.02, D - 0.04);
+  // Centre line + circle
+  line(0, 0, 0.02, D - 0.04);
+  const circleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+  const circle = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.20, 24), circleMat);
+  circle.rotation.x = -Math.PI / 2; circle.position.set(0, y + 0.009, 0); g.add(circle);
+  // Penalty boxes
+  [-W/2 + 0.20, W/2 - 0.20].forEach(bx => {
+    const sign = bx < 0 ? 1 : -1;
+    line(bx + sign * 0.095, 0, 0.02, 0.70);
+    line(bx + sign * 0.005, 0.35, 0.20, 0.02);
+    line(bx + sign * 0.005, -0.35, 0.20, 0.02);
+  });
+  // Goals
+  const goalMat = cachedMat(0xeeeeee);
+  [-W/2 - 0.05, W/2 + 0.05].forEach(gx => {
+    const goalFrame = new THREE.Group();
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.40), goalMat);
+    crossbar.position.set(0, y + 0.08, 0); goalFrame.add(crossbar);
+    [-0.19, 0.19].forEach(gz => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.02), goalMat);
+      post.position.set(0, y + 0.04, gz); goalFrame.add(post);
+    });
+    goalFrame.position.x = gx; g.add(goalFrame);
+  });
+  return g;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // INFRASTRUCTURE detailed meshes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1475,6 +1578,8 @@ export function createBuildingMesh(buildingId, seed = 0, plotW = 1, plotD = 1) {
   if (buildingId === 'park_small')      return _createParkSmall(def);
   if (buildingId === 'park_medium')     return _createParkMedium(def);
   if (buildingId === 'park_large')      return _createParkLarge(def);
+  if (buildingId === 'tennis_court')    return _createTennisCourt(def);
+  if (buildingId === 'football_field')  return _createFootballField(def);
   // Infrastructure detailed meshes
   if (buildingId === 'generator_small') return _createGeneratorSmall(def);
   if (buildingId === 'power_plant')     return _createPowerPlant(def);

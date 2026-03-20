@@ -530,6 +530,31 @@ export class City extends EventEmitter {
     }
   }
 
+  /** Export a save slot as a JSON string for file download. */
+  exportSave(slot) {
+    const key  = this._saveKey(slot);
+    const data = localStorage.getItem(key);
+    return data ?? null;
+  }
+
+  /** Import a save from a JSON string (file upload). Validates version. */
+  importSave(jsonString) {
+    const CURRENT_VERSION = 1;
+    let obj;
+    try { obj = JSON.parse(jsonString); }
+    catch { return { success: false, error: 'Invalid file: not valid JSON.' }; }
+    if (!obj?.version) return { success: false, error: 'Invalid save file: missing version.' };
+    if (obj.version !== CURRENT_VERSION)
+      return { success: false, error: `Save version ${obj.version} is not compatible (expected ${CURRENT_VERSION}).` };
+    // Load into slot 1, overwriting it
+    try {
+      localStorage.setItem(this._saveKey(1), jsonString);
+      return this.loadGame(1);
+    } catch (e) {
+      return { success: false, error: String(e) };
+    }
+  }
+
   /**
    * Reset to a fresh new game. Emits 'gameReset' for scene rebuild and terrain regeneration.
    */
