@@ -20,6 +20,8 @@ export class EventEmitter {
     if (l) this._listeners[event] = l.filter(f => f !== fn);
   }
   emit(event, data) { (this._listeners[event] ?? []).forEach(fn => fn(data)); }
+  /** Emit both stateChanged and layoutChanged (road/building layout altered). */
+  _emitLayout() { const s = this.getState(); this.emit('stateChanged', s); this.emit('layoutChanged', s); }
 }
 
 // ── Speed presets ────────────────────────────────────────────────────────────
@@ -873,7 +875,7 @@ export class City extends EventEmitter {
       if (!def) return;
       if ((def.requires?.power || 0) > 0 && !powerOK) return;
       if ((def.requires?.water || 0) > 0 && !waterOK) return;
-      const plots2 = this._grid.detectPlots().filter(p => p.zoneType === zoneType);
+      const plots2 = plots.filter(p => p.zoneType === zoneType);
       if (!plots2.length) return;
       const plot2 = plots2[0];
       this._grid.placePlot(plot2, buildingId);
@@ -911,7 +913,7 @@ export class City extends EventEmitter {
     if (!tile) return { success: false, reason: 'Invalid tile' };
     const ok = this._grid.setTileZone(x, z, zoneType);
     if (!ok)   return { success: false, reason: 'Cannot zone this tile' };
-    this.emit('stateChanged', this.getState());
+    this._emitLayout();
     return { success: true };
   }
 
@@ -931,7 +933,7 @@ export class City extends EventEmitter {
       if (!ok) return { success: false, reason: 'Cannot place here' };
       this._state.money -= cost;
       this._refreshResourceStats();
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
       return { success: true };
     }
 
@@ -965,7 +967,7 @@ export class City extends EventEmitter {
     this._state.money -= def.cost;
     if (def.category === 'service') this._grid.recalculateServiceEffects();
     this._refreshResourceStats();
-    this.emit('stateChanged', this.getState());
+    this._emitLayout();
     return { success: true };
   }
 
@@ -994,7 +996,7 @@ export class City extends EventEmitter {
     }
     if (placed > 0) {
       this._refreshResourceStats();
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
     }
     return { placed, cost: spent, errors: [] };
   }
@@ -1023,7 +1025,7 @@ export class City extends EventEmitter {
       // Remove — partial refund
       tile.trafficLight = false;
       this._state.money += 250;
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
       return { success: true, removed: true };
     } else {
       // Place — charge full cost
@@ -1032,7 +1034,7 @@ export class City extends EventEmitter {
         return { success: false, reason: `Not enough money (need €${cost})` };
       tile.trafficLight = true;
       this._state.money -= cost;
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
       return { success: true, removed: false };
     }
   }
@@ -1041,7 +1043,7 @@ export class City extends EventEmitter {
     let placed = 0, skipped = 0;
     for (const tile of tiles)
       this._grid.setTileZone(tile.x, tile.z, zoneType) ? placed++ : skipped++;
-    if (placed > 0) this.emit('stateChanged', this.getState());
+    if (placed > 0) this._emitLayout();
     return { placed, skipped };
   }
 
@@ -1056,7 +1058,7 @@ export class City extends EventEmitter {
     if (tile.type === 'road' && !tile.isBridge) {
       this._grid.removeRoad(x, z);
       this._refreshResourceStats();
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
       return { success: true };
     }
 
@@ -1064,7 +1066,7 @@ export class City extends EventEmitter {
     if (tile.type === 'zone' && !tile.building) {
       this._grid.clearZone(x, z);
       this._refreshResourceStats();
-      this.emit('stateChanged', this.getState());
+      this._emitLayout();
       return { success: true };
     }
 
@@ -1078,7 +1080,7 @@ export class City extends EventEmitter {
     this._grid.removeBuilding(x, z);
     if (wasService) this._grid.recalculateServiceEffects();
     this._refreshResourceStats();
-    this.emit('stateChanged', this.getState());
+    this._emitLayout();
     return { success: true };
   }
 

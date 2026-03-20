@@ -91,6 +91,7 @@ export class TrafficSystem {
     this._spawnAccum  = 0;     // accumulates fractional spawn debt
     this._busAccum    = 0;     // school bus spawn accumulator
     this._trafficLights = null;  // TrafficLightSystem reference
+    this._lastIsNight = null;
   }
 
   /**
@@ -139,7 +140,9 @@ export class TrafficSystem {
     if (speedMult === 0) return; // paused
 
     const carSpeed   = BASE_SPEED * speedMult; // tiles/sec
-    const isNight    = gameHour < 6 || gameHour >= 20;
+    const isNight        = gameHour < 6 || gameHour >= 20;
+    const isNightChanged = isNight !== this._lastIsNight;
+    if (isNightChanged) this._lastIsNight = isNight;
     const elapsed    = dt * speedMult;         // scaled elapsed for police lights
 
     // Try to spawn cars based on hour demand
@@ -152,13 +155,16 @@ export class TrafficSystem {
       car.elapsedMs += elapsed;
 
       if (car.type === 'police') updatePoliceBar(car.mesh, car.elapsedMs);
-      updateCarLights(car.mesh, isNight);
+      if (isNightChanged) updateCarLights(car.mesh, isNight);
 
       if (car.state === 'parked') {
         car.parkTimer -= dt;
         if (car.parkTimer <= 0) this._removeCar(car);
         continue;
       }
+
+      // Compute once per frame — _isBlocked is O(n) in car count
+      const blocked = this._isBlocked(car);
 
       if (car.state === 'waiting') {
         const ni = car.routeIdx + 1;
@@ -169,7 +175,7 @@ export class TrafficSystem {
           // Waiting at a red light — hold forever, no despawn
           car.speed = 0; continue;
         }
-        if (this._isBlocked(car)) {
+        if (blocked) {
           // Blocked by the car in front — despawn after 7 real seconds
           car.waitTimer += dt;
           if (car.waitTimer > MAX_WAIT_MS) { this._removeCar(car); continue; }
@@ -180,7 +186,7 @@ export class TrafficSystem {
       }
 
       // ── Traffic light gate — lead car only (no car directly in front) ──────
-      if (this._trafficLights && !this._isBlocked(car)) {
+      if (this._trafficLights && !blocked) {
         const ni = car.routeIdx + 1;
         if (ni < car.route.length &&
             this._trafficLights.isRedFor(car.route[car.routeIdx], car.route[ni])) {
@@ -192,7 +198,7 @@ export class TrafficSystem {
         }
       }
 
-      const carBlocked = this._isBlocked(car);
+      const carBlocked = blocked;
       if (carBlocked) {
         // Car-to-car block: brake and enter waiting state when fully stopped
         car.speed = Math.max(0, car.speed - 1.8 * dt / 1000);
@@ -465,6 +471,7 @@ export class TrafficSystem {
     car._visitedStops   = new Set();  // prevent re-stopping at same tile
     mesh.userData.car = car;          // back-reference for debug raycasting
     this._updateCarTransform(car);
+    updateCarLights(mesh, this._lastIsNight ?? false);
     this._cars.push(car);
   }
 
@@ -494,6 +501,7 @@ export class TrafficSystem {
     const car = new Car(mesh, route, carType, this._nextId++);
     mesh.userData.car = car; // back-reference for debug raycasting
     this._updateCarTransform(car);
+    updateCarLights(mesh, this._lastIsNight ?? false);
     this._cars.push(car);
   }
 

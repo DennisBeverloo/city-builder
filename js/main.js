@@ -52,14 +52,14 @@ trafficSystem.init(scene, grid);
 // Expose for settings / handedness toggle
 window._trafficSystem = trafficSystem;
 
-city.on('stateChanged', () => trafficSystem.rebuild());
+city.on('layoutChanged', () => trafficSystem.rebuild());
 
 const trafficLights = new TrafficLightSystem();
 trafficLights.init(scene, grid);
 trafficSystem.setTrafficLights(trafficLights);
 window._trafficLights = trafficLights;
 
-city.on('stateChanged', () => trafficLights.rebuild());
+city.on('layoutChanged', () => trafficLights.rebuild());
 
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ city.on('monthProcessed', _refreshHeatmap);
 
 // ── Scene rebuild after load / reset ─────────────────────────────────────────
 
-city.on('stateChanged', () => updateRoadMarkings(grid));
+city.on('layoutChanged', () => updateRoadMarkings(grid));
 
 city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   // Remove stale building meshes from scene.
