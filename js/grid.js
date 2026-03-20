@@ -3,7 +3,7 @@
  * 40×40 tile grid: manages tile state AND Three.js floor/building meshes.
  */
 import * as THREE from 'three';
-import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, createGarageMesh } from './buildings.js';
+import { createBuildingMesh, createBridgeMesh, BUILDINGS, createPlotGardenMesh, createGarageMesh, UPGRADE_REQS, PLOT_SIZES } from './buildings.js';
 
 // Tile floor colours
 const C = {
@@ -689,6 +689,42 @@ export class Grid {
 
     // 4d: Per-tile happiness — fresh computation this tick
     this._applyTileHappiness();
+
+    // 4e: Zone upgrade checks
+    const upgrades = [], blocked = [], unblocked = [];
+    for (const t of tiles) {
+      const b = t.building;
+      if (!b) continue;
+      // Only process anchor tiles
+      if (t.x !== b.tileX || t.z !== b.tileZ) continue;
+      const req = UPGRADE_REQS[b.id];
+      if (!req) continue; // max level or not a zone building
+
+      const condMet = t.landValue >= req.landValue && t.happiness >= req.happiness;
+      if (condMet) {
+        b.upgradeTimer = (b.upgradeTimer ?? 0) + 1;
+        if (b.upgradeTimer >= req.months) {
+          const plot = this.findBestUpgradePlot(t, req.next);
+          if (plot) {
+            upgrades.push({ anchorX: b.tileX, anchorZ: b.tileZ, newId: req.next, plot });
+            b.upgradeTimer = 0; // reset only on successful upgrade
+          } else if (!b.upgradeBlocked) {
+            b.upgradeBlocked = true;
+            blocked.push({ anchorX: b.tileX, anchorZ: b.tileZ });
+          }
+          // Cap timer when blocked — don't keep incrementing
+          b.upgradeTimer = Math.min(b.upgradeTimer, req.months);
+        }
+      } else {
+        b.upgradeTimer = Math.max(0, (b.upgradeTimer ?? 0) - 1);
+        if (b.upgradeBlocked) {
+          b.upgradeBlocked = false;
+          unblocked.push({ anchorX: b.tileX, anchorZ: b.tileZ });
+        }
+      }
+    }
+
+    return { upgrades, blocked, unblocked };
   }
 
   // ── Plot detection ───────────────────────────────────────────────
@@ -891,6 +927,8 @@ export class Grid {
       plotWidth: plot.width, plotDepth: plot.depth,
       plotRoadDir: plot.roadDir,
       plotTiles: plot.tiles.map(t => this.getTile(t.x, t.z)).filter(Boolean),
+      upgradeTimer:   0,
+      upgradeBlocked: false,
     };
 
     for (const t of plot.tiles) {
@@ -900,6 +938,219 @@ export class Grid {
 
     this.calculateRoadAccess();
     return true;
+  }
+
+  // ── Upgrade helpers ──────────────────────────────────────────────
+
+  /**
+   * Direction vectors for plot expansion (matches detectPlots DIRS).
+   */
+  static _UPGRADE_DIRS = {
+    N: { wdx: 1, wdz: 0, ddx: 0, ddz:  1 },
+    S: { wdx: 1, wdz: 0, ddx: 0, ddz: -1 },
+    E: { wdx: 0, wdz: 1, ddx: -1, ddz: 0 },
+    W: { wdx: 0, wdz: 1, ddx:  1, ddz: 0 },
+  };
+
+  /**
+   * Returns array of tile objects for a plot with given anchor, size, road direction,
+   * or null if any tile is out of bounds.
+   * @param {number} ax @param {number} az @param {number} w @param {number} d @param {string} roadDir
+   * @returns {object[]|null}
+   */
+  _getPlotTilesForDir(ax, az, w, d, roadDir) {
+    const dir = Grid._UPGRADE_DIRS[roadDir] ?? Grid._UPGRADE_DIRS.N;
+    const { wdx, wdz, ddx, ddz } = dir;
+    const result = [];
+    for (let wi = 0; wi < w; wi++) {
+      for (let di = 0; di < d; di++) {
+        const tx = ax + wdx * wi + ddx * di;
+        const tz = az + wdz * wi + ddz * di;
+        const t = this.getTile(tx, tz);
+        if (!t) return null; // out of bounds
+        result.push(t);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find the best plot layout for an upgrade, expanding into adjacent empty zone tiles.
+   * @param {object} anchorTile  The anchor tile of the current building.
+   * @param {string} newBuildingId  The target building ID.
+   * @returns {object|null}  Plot descriptor or null.
+   */
+  findBestUpgradePlot(anchorTile, newBuildingId) {
+    const b = anchorTile.building;
+    if (!b) return null;
+
+    // Current footprint keys
+    const currentKeys = new Set();
+    const plotTiles = b.plotTiles ?? [anchorTile];
+    for (const pt of plotTiles) currentKeys.add(`${pt.x}_${pt.z}`);
+
+    const targetSizes = PLOT_SIZES[newBuildingId];
+    if (!targetSizes) return null;
+
+    const roadDir = b.plotRoadDir ?? 'N';
+
+    // Bounds of current footprint
+    const xs = plotTiles.map(pt => pt.x);
+    const zs = plotTiles.map(pt => pt.z);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+
+    const zoneType = anchorTile.zoneType;
+
+    for (const [w, d] of targetSizes) {
+      // Try anchor offsets
+      for (let oax = minX - 1; oax <= minX + 1; oax++) {
+        for (let oaz = minZ - 1; oaz <= minZ + 1; oaz++) {
+          const tileset = this._getPlotTilesForDir(oax, oaz, w, d, roadDir);
+          if (!tileset) continue;
+
+          // Validate each tile
+          let valid = true;
+          let hasCurrentKey = false;
+          for (const t of tileset) {
+            const key = `${t.x}_${t.z}`;
+            if (currentKeys.has(key)) {
+              hasCurrentKey = true;
+              continue;
+            }
+            // Must be free zone tile of matching type
+            if (t.type !== 'zone' || t.zoneType !== zoneType || t.building) {
+              valid = false;
+              break;
+            }
+          }
+          if (!valid || !hasCurrentKey) continue;
+
+          // Must have at least 1 tile adjacent to a road tile in roadDir direction
+          // rdx/rdz is the direction toward the road from the plot
+          const rdxMap = { N: 0, S: 0, E:  1, W: -1 };
+          const rdzMap = { N: -1, S: 1, E:  0, W:  0 };
+          const rdx = rdxMap[roadDir] ?? 0;
+          const rdz = rdzMap[roadDir] ?? -1;
+          let hasRoad = false;
+          for (const t of tileset) {
+            const nb = this.getTile(t.x + rdx, t.z + rdz);
+            if (nb?.type === 'road') { hasRoad = true; break; }
+          }
+          if (!hasRoad) continue;
+
+          // Build world centre
+          const txs = tileset.map(t => t.x);
+          const tzs = tileset.map(t => t.z);
+          const worldCX = (Math.min(...txs) + Math.max(...txs) + 1) / 2;
+          const worldCZ = (Math.min(...tzs) + Math.max(...tzs) + 1) / 2;
+
+          return {
+            anchorX: oax, anchorZ: oaz,
+            width: w, depth: d,
+            zoneType,
+            roadDir,
+            tiles: tileset,
+            worldCX, worldCZ,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Like removeBuilding but does NOT remove the main mesh from scene — caller handles animation.
+   * Removes garden and garage meshes, clears plot tile state.
+   * @param {number} anchorX @param {number} anchorZ
+   * @returns {THREE.Object3D|null}  The old main mesh (still in scene).
+   */
+  _clearBuildingTilesOnly(anchorX, anchorZ) {
+    const tile = this.getTile(anchorX, anchorZ);
+    if (!tile?.building) return null;
+
+    const b = tile.building;
+
+    // Remove garden and garage meshes if present
+    if (b.gardenMesh) this._scene.remove(b.gardenMesh);
+    if (b.garageMesh) this._scene.remove(b.garageMesh);
+
+    const oldMesh = this._bMeshes.get(this._key(anchorX, anchorZ)) ?? b.mesh ?? null;
+
+    // Remove from bMeshes map but do NOT call scene.remove on main mesh
+    this._bMeshes.delete(this._key(anchorX, anchorZ));
+
+    // Clear all plot tiles
+    const tilesToClear = b.plotTiles ?? [tile];
+    for (const pt of tilesToClear) {
+      const ft = this.getTile(pt.x, pt.z);
+      if (!ft) continue;
+      ft.building = null;
+      ft.type = ft.zoneType ? 'zone' : 'empty';
+      this._restoreColor(ft);
+    }
+
+    // For non-plot buildings (size > 1, no plotTiles), also clear footprint
+    if (!b.plotTiles) {
+      const def = b.def;
+      if (def) {
+        const [w, d] = this._getBuildingSize(def);
+        for (let dx = 0; dx < w; dx++) {
+          for (let dz = 0; dz < d; dz++) {
+            const ft = this.getTile(anchorX + dx, anchorZ - dz);
+            if (!ft) continue;
+            ft.building = null;
+            if (ft.zoneType) ft.type = 'zone';
+            else             ft.type = 'empty';
+            this._restoreColor(ft);
+          }
+        }
+      }
+    }
+
+    this.calculateRoadAccess();
+    return oldMesh;
+  }
+
+  /**
+   * Execute an upgrade: clear old building tiles, place new building, return old mesh.
+   * The old mesh is left in scene for demolish animation; caller removes it after animation.
+   * @param {number} anchorX @param {number} anchorZ @param {string} newBuildingId @param {object} newPlot
+   * @returns {THREE.Object3D|null}  Old mesh reference.
+   */
+  executeUpgrade(anchorX, anchorZ, newBuildingId, newPlot) {
+    const oldMesh = this._clearBuildingTilesOnly(anchorX, anchorZ);
+    this.placePlot(newPlot, newBuildingId);
+    return oldMesh;
+  }
+
+  /**
+   * Scan tiles within radius of (x,z) for blocked upgrades, retry them.
+   * @param {number} x @param {number} z @param {number} [radius=6]
+   * @returns {Array<{anchorX, anchorZ, newId, plot, oldMesh}>}
+   */
+  checkUpgradesNear(x, z, radius = 6) {
+    const upgrades = [];
+    const r = Math.ceil(radius);
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) + Math.abs(dz) > radius) continue;
+        const t = this.getTile(x + dx, z + dz);
+        if (!t?.building) continue;
+        const b = t.building;
+        if (t.x !== b.tileX || t.z !== b.tileZ) continue; // satellite tile
+        if (!b.upgradeBlocked) continue;
+        const req = UPGRADE_REQS[b.id];
+        if (!req) continue;
+        const plot = this.findBestUpgradePlot(t, req.next);
+        if (plot) {
+          b.upgradeBlocked = false;
+          const oldMesh = this.executeUpgrade(b.tileX, b.tileZ, req.next, plot);
+          upgrades.push({ anchorX: b.tileX, anchorZ: b.tileZ, newId: req.next, plot, oldMesh });
+        }
+      }
+    }
+    return upgrades;
   }
 
   getStats() {

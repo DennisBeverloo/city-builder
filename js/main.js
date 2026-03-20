@@ -16,6 +16,7 @@ import {
   initHeatmapControls, getActiveHeatmap,
 } from './ui.js';
 import { BUILDINGS, createBuildingMesh } from './buildings.js';
+import { tickAnimations, animateDemolish, animateRise, cancelAnimation } from './animations.js';
 import { initModalTriggers } from './modals.js';
 import { TrafficSystem } from './traffic/trafficSystem.js';
 import { TrafficLightSystem } from './traffic/trafficLights.js';
@@ -43,6 +44,31 @@ initSpeedControls(city);
 initPauseMenu(city);
 
 city.on('laborStateChanged', applyLaborStateColors);
+
+// ── Building animation events ─────────────────────────────────────────────────
+
+city.on('buildingDemolished', ({ mesh }) => {
+  cancelAnimation(mesh);
+  animateDemolish(mesh, () => scene.remove(mesh));
+});
+
+city.on('buildingUpgraded', ({ anchorX, anchorZ, oldMesh, newId }) => {
+  // Remove upgrade icon if present
+  _removeUpgradeIcon(anchorX, anchorZ);
+  // Cancel any existing animation on old mesh and demolish it
+  if (oldMesh) {
+    cancelAnimation(oldMesh);
+    animateDemolish(oldMesh, () => scene.remove(oldMesh));
+  }
+  // Animate rise of new mesh (find it via grid)
+  const anchorTile = grid.getTile(anchorX, anchorZ);
+  if (anchorTile?.building?.mesh) {
+    animateRise(anchorTile.building.mesh);
+  }
+});
+
+city.on('buildingUpgradeBlocked',   ({ anchorX, anchorZ }) => _addUpgradeIcon(anchorX, anchorZ));
+city.on('buildingUpgradeUnblocked', ({ anchorX, anchorZ }) => _removeUpgradeIcon(anchorX, anchorZ));
 
 // ── Traffic system ───────────────────────────────────────────────────────────
 
@@ -83,12 +109,21 @@ city.on('gameLoaded', ({ oldForestTiles, oldMeshes }) => {
   for (const mesh of oldMeshes) scene.remove(mesh);
   // Clear forest tree meshes.
   for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
+  // Clear all upgrade icons
+  for (const [, entry] of _upgradeIcons) scene.remove(entry.mesh);
+  _upgradeIcons.clear();
   // Rebuild floor colors and building meshes from grid state.
   rebuildSceneFromGrid(grid);
   updateRoadMarkings(grid);
   _refreshHeatmap();
   trafficSystem.clear(); trafficSystem.rebuild();
   trafficLights.clear(); trafficLights.rebuild();
+  // Restore upgrade icons for blocked buildings
+  for (const tile of grid.getAllTiles()) {
+    if (tile.building?.upgradeBlocked && tile.x === tile.building.tileX && tile.z === tile.building.tileZ) {
+      _addUpgradeIcon(tile.x, tile.z);
+    }
+  }
 });
 
 city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
@@ -96,6 +131,9 @@ city.on('gameReset', ({ oldForestTiles, oldMeshes }) => {
   for (const mesh of oldMeshes) scene.remove(mesh);
   // Clear all forest tree meshes.
   for (const { x, z } of oldForestTiles) clearForestAt(scene, x, z);
+  // Clear all upgrade icons
+  for (const [, entry] of _upgradeIcons) scene.remove(entry.mesh);
+  _upgradeIcons.clear();
   // Regenerate fresh terrain (rivers, forests, trees).
   generateTerrain(grid, scene);
   grid.setDecorationRemover((x, z) => clearForestAt(scene, x, z));
@@ -351,6 +389,54 @@ function showDragInfo(tool, tiles) {
 
 function hideDragInfo() {
   _dragInfoEl?.classList.add('hidden');
+}
+
+// ── Upgrade icons ────────────────────────────────────────────────────────────
+
+/** Map of "anchorX_anchorZ" → { mesh, baseY, t } for bobbing upgrade arrows */
+const _upgradeIcons = new Map();
+
+function _createUpgradeIconMesh() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffcc00,
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+  });
+  // Cylinder stem
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 8), mat);
+  stem.position.y = 0.11;
+  group.add(stem);
+  // Cone head
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.22, 8), mat);
+  head.position.y = 0.33;
+  group.add(head);
+  return group;
+}
+
+function _addUpgradeIcon(anchorX, anchorZ) {
+  const key = `${anchorX}_${anchorZ}`;
+  if (_upgradeIcons.has(key)) return;
+  const tile = grid.getTile(anchorX, anchorZ);
+  if (!tile?.building?.mesh) return;
+  const b = tile.building;
+  const baseY = b.mesh.position.y + b.def.height / 2 + 0.35;
+  const worldX = b.mesh.position.x;
+  const worldZ = b.mesh.position.z;
+  const mesh = _createUpgradeIconMesh();
+  mesh.position.set(worldX, baseY, worldZ);
+  scene.add(mesh);
+  _upgradeIcons.set(key, { mesh, baseY, t: 0 });
+}
+
+function _removeUpgradeIcon(anchorX, anchorZ) {
+  const key = `${anchorX}_${anchorZ}`;
+  const entry = _upgradeIcons.get(key);
+  if (entry) {
+    scene.remove(entry.mesh);
+    _upgradeIcons.delete(key);
+  }
 }
 
 // ── Input state ──────────────────────────────────────────────────────────────
@@ -759,8 +845,14 @@ function animate(ts) {
   _lastTime = ts;
   _handleKeyPan();
   city.tick(dt);
+  tickAnimations(dt);
   trafficSystem.tick(dt, city.getGameHour(), city.getSpeedMultiplier(), city.getState());
   trafficLights.tick(dt, city.getSpeedMultiplier(), trafficSystem.getCars());
+  // Bob upgrade icons up and down
+  for (const [, entry] of _upgradeIcons) {
+    entry.t += dt;
+    entry.mesh.position.y = entry.baseY + Math.sin(entry.t * 0.0025) * 0.18;
+  }
   render();
   // FPS
   _fpsCount++;

@@ -7,7 +7,7 @@
  *   Every 6 game-hours → _updateSimulation (pop/power/water/happiness/RCI/auto-spawn)
  *   Every 30 game-days → _advanceMonth (taxes + upkeep + autosave)
  */
-import { BUILDINGS } from './buildings.js';
+import { BUILDINGS, UPGRADE_REQS } from './buildings.js';
 import { processMonth } from './economy.js';
 
 // ── Minimal EventEmitter ─────────────────────────────────────────────────────
@@ -208,7 +208,13 @@ export class City extends EventEmitter {
     const isMonthEnd = d.day > 30;
 
     if (isMonthEnd) {
-      this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
+      const { upgrades, blocked, unblocked } = this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
+      for (const u of upgrades) {
+        const oldMesh = this._grid.executeUpgrade(u.anchorX, u.anchorZ, u.newId, u.plot);
+        this.emit('buildingUpgraded', { anchorX: u.anchorX, anchorZ: u.anchorZ, oldMesh, newId: u.newId });
+      }
+      for (const b of blocked)   this.emit('buildingUpgradeBlocked',   { anchorX: b.anchorX, anchorZ: b.anchorZ });
+      for (const u of unblocked) this.emit('buildingUpgradeUnblocked', { anchorX: u.anchorX, anchorZ: u.anchorZ });
     }
 
     // Grow residential fill percentages every day (1/30 of monthly rate)
@@ -366,6 +372,8 @@ export class City extends EventEmitter {
           if (b.plotTiles?.length) {
             bd.plotTiles = b.plotTiles.map(pt => ({ x: pt.x, z: pt.z }));
           }
+          if (b.upgradeTimer)   bd.upgradeTimer   = b.upgradeTimer;
+          if (b.upgradeBlocked) bd.upgradeBlocked = true;
           t.building = bd;
         }
         gridData.push(t);
@@ -485,6 +493,8 @@ export class City extends EventEmitter {
               plotRoadDir:     saved.building.plotRoadDir     ?? null,
               plotTiles:       saved.building.plotTiles       ?? null,
               rotation:        saved.building.rotation        ?? 0,
+              upgradeTimer:    saved.building.upgradeTimer    ?? 0,
+              upgradeBlocked:  saved.building.upgradeBlocked  ?? false,
             };
           }
         }
@@ -1133,6 +1143,28 @@ export class City extends EventEmitter {
     }
 
     const wasService = tile.building?.def?.category === 'service';
+    const isZoneBuilding = tile.building?.def?.category === 'zone';
+
+    // For zone buildings: use _clearBuildingTilesOnly so we can animate demolish
+    if (tile.building && isZoneBuilding) {
+      const bMesh = tile.building.mesh ?? null;
+      // Clear tiles and garden/garage, but leave main mesh in scene for animation
+      this._grid._clearBuildingTilesOnly(x, z);
+      this._refreshResourceStats();
+      this._emitLayout();
+      // Emit demolish event so main.js can animate
+      if (bMesh) this.emit('buildingDemolished', { mesh: bMesh });
+      // After a short delay, check if nearby blocked upgrades can now proceed
+      const cx = x, cz = z;
+      setTimeout(() => {
+        const nearbyUpgrades = this._grid.checkUpgradesNear(cx, cz);
+        for (const u of nearbyUpgrades) {
+          this.emit('buildingUpgraded', { anchorX: u.anchorX, anchorZ: u.anchorZ, oldMesh: u.oldMesh, newId: u.newId });
+        }
+      }, 1000 + Math.random() * 1000);
+      return { success: true };
+    }
+
     this._grid.removeBuilding(x, z);
     if (wasService) this._grid.recalculateServiceEffects();
     this._refreshResourceStats();

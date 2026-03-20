@@ -205,6 +205,70 @@ export const BUILDINGS = {
     unlockAtLevel: 1, description: 'Full-scale pumping station for a growing city.',
   },
 
+  // ── Zone density upgrades (placed automatically by upgrade system) ──
+  residential_mid: {
+    id: 'residential_mid', name: 'Residential (Mid)',
+    category: 'zone', zoneType: 'R', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { capacity: 20 },
+    requires: { power: 2, water: 2 },
+    color: 0x388e3c, height: 1.8,
+    unlockAtLevel: 1, description: 'Mid-density residential. Up to 20 residents.',
+  },
+  residential_high: {
+    id: 'residential_high', name: 'Residential (High)',
+    category: 'zone', zoneType: 'R', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { capacity: 50 },
+    requires: { power: 4, water: 4 },
+    color: 0x1b5e20, height: 3.5,
+    unlockAtLevel: 1, description: 'High-density apartment block. Up to 50 residents.',
+  },
+  commercial_mid: {
+    id: 'commercial_mid', name: 'Commercial (Mid)',
+    category: 'zone', zoneType: 'C', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { jobs: 8 },
+    requires: { power: 4, water: 2 },
+    shopperDemand: 60,
+    requiresSupply: true,
+    color: 0x1565c0, height: 2.5,
+    unlockAtLevel: 1, description: 'Mid-density office/store. 8 jobs.',
+  },
+  commercial_high: {
+    id: 'commercial_high', name: 'Commercial (High)',
+    category: 'zone', zoneType: 'C', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { jobs: 20 },
+    requires: { power: 8, water: 4 },
+    shopperDemand: 150,
+    requiresSupply: true,
+    color: 0x0d47a1, height: 5.0,
+    unlockAtLevel: 1, description: 'High-density office tower. 20 jobs.',
+  },
+  industrial_mid: {
+    id: 'industrial_mid', name: 'Industrial (Mid)',
+    category: 'zone', zoneType: 'I', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { jobs: 25 },
+    requires: { power: 10, water: 6 },
+    suppliesCount: 12,
+    pollutes: true,
+    color: 0x616161, height: 1.8,
+    unlockAtLevel: 1, description: 'Mid-density factory. 25 jobs. Pollutes nearby tiles.',
+  },
+  industrial_high: {
+    id: 'industrial_high', name: 'Industrial (High)',
+    category: 'zone', zoneType: 'I', size: 1,
+    cost: 0, monthlyUpkeep: 0,
+    provides: { jobs: 60 },
+    requires: { power: 20, water: 10 },
+    suppliesCount: 25,
+    pollutes: true,
+    color: 0x37474f, height: 2.8,
+    unlockAtLevel: 1, description: 'High-density industrial complex. 60 jobs. Pollutes nearby tiles.',
+  },
+
   // ── Bridge (placed automatically when road is drawn over river) ───
   bridge: {
     id: 'bridge', name: 'Bridge',
@@ -214,6 +278,33 @@ export const BUILDINGS = {
     color: 0x546e7a, height: 0.22,
     unlockAtLevel: 1, description: 'Road over water. Costs €150/tile.',
   },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upgrade requirements and plot sizes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Requirements for automatic zone density upgrades. */
+export const UPGRADE_REQS = {
+  residential_low:  { next: 'residential_mid',  landValue: 25, happiness: 55, months: 4 },
+  residential_mid:  { next: 'residential_high', landValue: 55, happiness: 70, months: 8 },
+  commercial_low:   { next: 'commercial_mid',   landValue: 25, happiness: 55, months: 4 },
+  commercial_mid:   { next: 'commercial_high',  landValue: 55, happiness: 70, months: 8 },
+  industrial_low:   { next: 'industrial_mid',   landValue: 20, happiness: 50, months: 4 },
+  industrial_mid:   { next: 'industrial_high',  landValue: 50, happiness: 65, months: 8 },
+};
+
+/** Valid plot [width, depth] for each building type — sorted largest area first. */
+export const PLOT_SIZES = {
+  residential_low:  [[2,2],[2,1],[1,2],[1,1]],
+  residential_mid:  [[3,2],[2,3],[2,2],[2,1],[1,2]],
+  residential_high: [[4,4],[4,3],[3,4],[3,3],[3,2],[2,3]],
+  commercial_low:   [[2,1],[1,2],[1,1]],
+  commercial_mid:   [[3,2],[2,3],[2,2],[2,1],[1,2]],
+  commercial_high:  [[3,3],[3,2],[2,3],[2,2]],
+  industrial_low:   [[3,2],[2,3],[2,2],[2,1],[1,2]],
+  industrial_mid:   [[3,3],[3,2],[2,3]],
+  industrial_high:  [[4,4],[4,3],[3,4],[3,3]],
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -625,6 +716,331 @@ function _createResidentialMesh(def, rng) {
   const variants = [_r0Cottage, _r1Modern, _r2LShape, _r3Tall, _r4Ranch, _r5Rect];
   const idx = Math.floor(rng() * variants.length);
   return variants[idx](def, rng);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESIDENTIAL MID — duplex / 3-storey walk-up
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createResidentialMidMesh(def, rng) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+  const yTop =  h / 2;
+  const variant = rng() < 0.5 ? 0 : 1;
+
+  if (variant === 0) {
+    // Variant A: Two stacked boxes — ground floor slightly wider, flat roof with parapet, balcony strips
+    const wallMat    = cachedMat(pick(rng, [0xfff8dc, 0xe8f5e9, 0xe3f2fd, 0xeceff1, 0xfafafa]));
+    const upperMat   = cachedMat(pick(rng, [0xc8e6c9, 0xbbdefb, 0xdce775, 0xffe0b2]));
+    const roofMat    = cachedMat(pick(rng, [0x455a64, 0x37474f, 0x546e7a]));
+    const balconyMat = cachedMat(0x78909c);
+
+    // Ground floor
+    addBox(g, 0.80, 0.55, 0.72, 0, yBot + 0.275, 0, wallMat);
+    // Upper 2 floors (slightly narrower)
+    addBox(g, 0.72, 0.90, 0.64, 0, yBot + 0.55 + 0.45, 0, upperMat);
+    // Flat roof slab
+    addBox(g, 0.74, 0.04, 0.66, 0, yBot + h - 0.02, 0, roofMat);
+    // Parapet strips
+    addBox(g, 0.74, 0.06, 0.04, 0,     yTop + 0.01,  0.32, roofMat);
+    addBox(g, 0.74, 0.06, 0.04, 0,     yTop + 0.01, -0.32, roofMat);
+    addBox(g, 0.04, 0.06, 0.66,  0.37, yTop + 0.01,  0, roofMat);
+    addBox(g, 0.04, 0.06, 0.66, -0.37, yTop + 0.01,  0, roofMat);
+    // Balcony strips on upper floors
+    addBox(g, 0.74, 0.03, 0.06, 0, yBot + 0.55 + 0.30, 0.35, balconyMat);
+    addBox(g, 0.74, 0.03, 0.06, 0, yBot + 0.55 + 0.70, 0.35, balconyMat);
+    // Windows — ground floor south
+    addBox(g, 0.14, 0.18, 0.012, -0.22, yBot + 0.30, 0.361, M.window);
+    addBox(g, 0.14, 0.18, 0.012,  0.22, yBot + 0.30, 0.361, M.window);
+    // Windows — upper floors south
+    addBox(g, 0.12, 0.14, 0.012, -0.22, yBot + 0.85, 0.321, M.window);
+    addBox(g, 0.12, 0.14, 0.012,  0.00, yBot + 0.85, 0.321, M.window);
+    addBox(g, 0.12, 0.14, 0.012,  0.22, yBot + 0.85, 0.321, M.window);
+    addBox(g, 0.12, 0.14, 0.012, -0.22, yBot + 1.22, 0.321, M.window);
+    addBox(g, 0.12, 0.14, 0.012,  0.00, yBot + 1.22, 0.321, M.window);
+    addBox(g, 0.12, 0.14, 0.012,  0.22, yBot + 1.22, 0.321, M.window);
+    // Door south
+    addBox(g, 0.10, 0.22, 0.012, 0, yBot + 0.15, 0.362, cachedMat(pick(rng, DOOR_COLORS)));
+  } else {
+    // Variant B: L-shaped plan — two overlapping BoxGeometry at 90°, different heights
+    const wallMatA = cachedMat(pick(rng, WALL_COLORS));
+    const wallMatB = cachedMat(pick(rng, WALL_COLORS));
+    const roofMat  = cachedMat(pick(rng, [0x455a64, 0x37474f, 0x607d8b]));
+    const doorMat  = cachedMat(pick(rng, DOOR_COLORS));
+
+    // Main tall wing
+    addBox(g, 0.76, h, 0.44, 0, 0, -0.14, wallMatA);
+    // Side shorter wing — perpendicular
+    addBox(g, 0.38, h * 0.72, 0.62, 0.19, yBot + h * 0.36, 0.19, wallMatB);
+    // Roofs
+    addBox(g, 0.78, 0.04, 0.46, 0,    yTop,               -0.14, roofMat);
+    addBox(g, 0.40, 0.04, 0.64, 0.19, yBot + h * 0.72 + 0.02, 0.19, roofMat);
+    // Pitched roof on shorter wing (simple triangle approximation with box)
+    addBox(g, 0.40, 0.12, 0.04, 0.19, yBot + h * 0.72 + 0.06, -0.14, roofMat);
+    // Windows — main wing south
+    addBox(g, 0.14, 0.16, 0.012, -0.20, yBot + 0.40, 0.083, M.window);
+    addBox(g, 0.14, 0.16, 0.012,  0.10, yBot + 0.40, 0.083, M.window);
+    addBox(g, 0.14, 0.16, 0.012, -0.20, yBot + 1.00, 0.083, M.window);
+    addBox(g, 0.14, 0.16, 0.012,  0.10, yBot + 1.00, 0.083, M.window);
+    // Door — side wing south
+    addBox(g, 0.10, 0.22, 0.012, 0.19, yBot + 0.16, 0.51, doorMat);
+  }
+
+  return g;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESIDENTIAL HIGH — 6–8 storey apartment block
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createResidentialHighMesh(def, rng) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+  const yTop =  h / 2;
+
+  const wallMat   = cachedMat(pick(rng, [0xe0e0e0, 0xeceff1, 0xfafafa, 0xbdbdbd, 0xb0bec5]));
+  const accentMat = cachedMat(pick(rng, [0x546e7a, 0x37474f, 0x455a64, 0x1565c0]));
+  const roofMat   = cachedMat(0x607d8b);
+
+  const slabW = 0.55 + rng() * 0.17; // 0.55–0.72
+  // Tall slab
+  addBox(g, slabW, h, 0.65, 0, 0, 0, wallMat);
+  // Narrow ledge at roughly floor 3 (at ~40% height)
+  const ledgeY = yBot + h * 0.40;
+  addBox(g, slabW + 0.08, 0.04, 0.70, 0, ledgeY, 0, accentMat);
+  // Flat roof
+  addBox(g, slabW + 0.04, 0.05, 0.68, 0, yTop + 0.025, 0, roofMat);
+  // Parapet
+  addBox(g, slabW + 0.06, 0.08, 0.04, 0,          yTop + 0.06,  0.34, accentMat);
+  addBox(g, slabW + 0.06, 0.08, 0.04, 0,          yTop + 0.06, -0.34, accentMat);
+  addBox(g, 0.04, 0.08, 0.70,  (slabW / 2 + 0.04), yTop + 0.06,  0, accentMat);
+  addBox(g, 0.04, 0.08, 0.70, -(slabW / 2 + 0.04), yTop + 0.06,  0, accentMat);
+
+  // Rooftop: water tank cylinder + AC unit box, both offset to one side
+  addCyl(g, 0.08, 0.08, 0.14, slabW * 0.30, yTop + 0.12, 0.18, cachedMat(0x607d8b), 8);
+  addBox(g, 0.18, 0.10, 0.14, -slabW * 0.25, yTop + 0.10, -0.12, accentMat);
+
+  // Window grid: 3 columns × 5 rows (scale with height)
+  const nRows = Math.max(5, Math.round(h / 0.55));
+  const rowH  = h / (nRows + 1);
+  const cols  = [-slabW * 0.28, 0, slabW * 0.28];
+  for (let row = 0; row < nRows; row++) {
+    const wy = yBot + rowH * (row + 1);
+    // Skip ledge row
+    if (Math.abs(wy - ledgeY) < rowH * 0.6) continue;
+    for (const cx of cols) {
+      addBox(g, 0.10, 0.14, 0.012, cx, wy, 0.326, M.window);
+    }
+  }
+  // East face windows
+  for (let row = 0; row < nRows; row++) {
+    const wy = yBot + rowH * (row + 1);
+    if (Math.abs(wy - ledgeY) < rowH * 0.6) continue;
+    addBox(g, 0.012, 0.14, 0.14, slabW / 2 + 0.006, wy, 0, M.window);
+  }
+
+  return g;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCIAL MID — 3-floor office/department store
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createCommercialMidMesh(def, rng, plotW, plotD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const fp  = 0.60 + rng() * 0.05; // 0.60–0.65
+  const bW  = Math.max(0.65, plotW * fp);
+  const bD  = Math.max(0.65, plotD * fp);
+
+  const wallMat    = cachedMat(pick(rng, [0xe3f2fd, 0xeceff1, 0xfafafa, 0xe8eaf6, 0xe0f2f1]));
+  const upperMat   = cachedMat(pick(rng, [0xbbdefb, 0xb3e5fc, 0xc5cae9, 0xe1f5fe]));
+  const glassStrip = cachedMat(0x80deea);
+  const bandMat    = cachedMat(0x455a64);
+  const canopyMat  = cachedMat(pick(rng, [0x1565c0, 0xb71c1c, 0x1b5e20, 0xe65100]));
+  const doorMat    = cachedMat(pick(rng, DOOR_COLORS));
+
+  const floorH = h / 3;
+
+  // Ground floor — full footprint
+  addBox(g, bW, floorH, bD, 0, yBot + floorH / 2, 0, wallMat);
+  // Ground floor front glass strip (south face)
+  addBox(g, bW * 0.70, floorH * 0.55, 0.012, 0, yBot + floorH * 0.40, bD / 2 + 0.007, glassStrip);
+  // Door
+  addBox(g, 0.10, floorH * 0.65, 0.012, bW * 0.28, yBot + floorH * 0.37, bD / 2 + 0.008, doorMat);
+  // Horizontal banding between floor 1 and 2
+  addBox(g, bW + 0.04, 0.04, bD + 0.04, 0, yBot + floorH + 0.02, 0, bandMat);
+  // Upper floors — slightly setback
+  addBox(g, bW * 0.95, floorH * 2, bD * 0.92, 0, yBot + floorH + floorH, 0, upperMat);
+  // Band between floor 2 and 3
+  addBox(g, bW * 0.97, 0.04, bD * 0.94, 0, yBot + floorH * 2 + 0.02, 0, bandMat);
+  // Flat roof
+  addBox(g, bW * 0.97, 0.04, bD * 0.94, 0, yBot + h - 0.02, 0, bandMat);
+  // Entrance canopy (south)
+  const canopyW = bW * 0.30;
+  const canopyAngle = 0.20;
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(canopyW, 0.03, 0.22), canopyMat);
+  canopy.position.set(0, yBot + floorH * 0.80, bD / 2 + 0.13);
+  canopy.rotation.x = canopyAngle;
+  canopy.castShadow = true;
+  g.add(canopy);
+  // Upper floor windows
+  const nWin = Math.max(2, Math.round(bW / 0.28));
+  for (let i = 0; i < nWin; i++) {
+    const wx = (i - (nWin - 1) / 2) * (bW * 0.90 / nWin);
+    addBox(g, 0.12, 0.18, 0.012, wx, yBot + floorH + floorH * 0.45, bD * 0.46 + 0.007, M.window);
+    addBox(g, 0.12, 0.18, 0.012, wx, yBot + floorH * 2 + floorH * 0.45, bD * 0.46 + 0.007, M.window);
+  }
+
+  return g;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCIAL HIGH — office tower
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createCommercialHighMesh(def, rng, plotW, plotD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const podiumW = Math.max(0.80, plotW * 0.60);
+  const podiumD = Math.max(0.80, plotD * 0.60);
+  const podiumH = 1.2;
+
+  const towerFrac = 0.35;
+  const towerW = podiumW * towerFrac;
+  const towerD = podiumD * 0.80;
+  const towerH = h - podiumH;
+
+  const podiumMat  = cachedMat(pick(rng, [0xe0e0e0, 0xeceff1, 0xcfd8dc]));
+  const glassMat   = cachedMat(0x90caf9);
+  const bandMat    = cachedMat(0x37474f);
+  const antennaMat = cachedMat(0x607d8b);
+
+  // Podium base
+  addBox(g, podiumW, podiumH, podiumD, 0, yBot + podiumH / 2, 0, podiumMat);
+  // Podium roof trim
+  addBox(g, podiumW + 0.04, 0.04, podiumD + 0.04, 0, yBot + podiumH + 0.02, 0, bandMat);
+  // Podium door
+  addBox(g, 0.14, podiumH * 0.50, 0.012, 0, yBot + podiumH * 0.30, podiumD / 2 + 0.007, cachedMat(0x0d47a1));
+  // Podium glass curtain (south)
+  addBox(g, podiumW * 0.60, podiumH * 0.55, 0.012, 0, yBot + podiumH * 0.55, podiumD / 2 + 0.006, glassMat);
+
+  // Slim glass tower
+  addBox(g, towerW, towerH, towerD, 0, yBot + podiumH + towerH / 2, 0, glassMat);
+  // 4–6 horizontal dark dividers on tower
+  const nDividers = 4 + Math.floor(rng() * 3);
+  for (let i = 1; i <= nDividers; i++) {
+    const dy = yBot + podiumH + (towerH / (nDividers + 1)) * i;
+    addBox(g, towerW + 0.04, 0.04, towerD + 0.04, 0, dy, 0, bandMat);
+  }
+  // Antenna
+  addCyl(g, 0.015, 0.02, 0.40, 0, yBot + h + 0.20, 0, antennaMat, 6);
+
+  return g;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRIAL MID — larger factory complex
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createIndustrialMidMesh(def, rng, plotW, plotD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const bW = Math.max(0.80, plotW * 0.65);
+  const bD = Math.max(0.80, plotD * 0.65);
+  const wallMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
+  const roofMat = cachedMat(0x78909c);
+
+  // Main building — taller than low variant
+  addBox(g, bW, h, bD, 0, 0, 0, wallMat);
+  // Flat roof
+  addBox(g, bW + 0.04, 0.025, bD + 0.04, 0, yBot + h + 0.012, 0, roofMat);
+  // Raised centre section (sawtooth hint)
+  addBox(g, bW * 0.55, 0.14, bD + 0.06, 0, yBot + h + 0.08, 0, cachedMat(0x607d8b));
+
+  // Two large chimneys
+  const chiH = 0.50;
+  addRoundChimney(g,  bW * 0.28, -bD * 0.28, chiH, yBot + h + 0.025);
+  addRoundChimney(g, -bW * 0.20, -bD * 0.28, chiH, yBot + h + 0.025);
+
+  // Loading dock extension (thin low box on south side)
+  addBox(g, bW * 0.60, 0.18, 0.22, 0, yBot + 0.09, bD / 2 + 0.11, cachedMat(0xb0bec5));
+  // Roll-up door (south)
+  addBox(g, bW * 0.40, h * 0.60, 0.012, 0, yBot + h * 0.30, bD / 2 + 0.007, M.garageDark);
+  // Windows south
+  addBox(g, 0.12, 0.10, 0.012, -bW * 0.35, yBot + h * 0.76, bD / 2 + 0.007, M.window);
+  addBox(g, 0.12, 0.10, 0.012,  bW * 0.35, yBot + h * 0.76, bD / 2 + 0.007, M.window);
+
+  // Props area — more barrels and crates
+  const propY = yBot;
+  const propX = bW / 2 + 0.08;
+  const propZ = -bD / 2 + 0.20;
+  addBarrel(g, propX, propZ,         propY);
+  addBarrel(g, propX, propZ + 0.14,  propY);
+  addBarrel(g, propX, propZ + 0.28,  propY);
+  addCrate(g,  propX + 0.14, propZ,  propY, 0.10);
+  addCrate(g,  propX + 0.14, propZ + 0.12, propY, 0.10);
+
+  return g;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRIAL HIGH — modern tech/industrial
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _createIndustrialHighMesh(def, rng, plotW, plotD) {
+  const g    = new THREE.Group();
+  const h    = def.height;
+  const yBot = -h / 2;
+
+  const bW = Math.max(1.00, plotW * 0.70);
+  const bD = Math.max(1.00, plotD * 0.70);
+  const mainH = 2.0;
+
+  const wallMat    = cachedMat(0xe0e0e0);
+  const glassMat   = cachedMat(0x80deea);
+  const solarMat   = cachedMat(0x1a237e);
+  const chimneyMat = cachedMat(0xb0bec5);
+  const containerMat = cachedMat(0x00acc1);
+
+  // Clean low-rise main building
+  addBox(g, bW, mainH, bD, 0, yBot + mainH / 2, 0, wallMat);
+  // Flat roof
+  addBox(g, bW + 0.04, 0.025, bD + 0.04, 0, yBot + mainH + 0.012, 0, cachedMat(0xbdbdbd));
+
+  // Glass curtain-wall strip on front (south) facade
+  addBox(g, bW * 0.55, mainH * 0.65, 0.012, 0, yBot + mainH * 0.48, bD / 2 + 0.007, glassMat);
+  // Entrance door
+  addBox(g, 0.12, mainH * 0.45, 0.012, bW * 0.30, yBot + mainH * 0.28, bD / 2 + 0.008, cachedMat(0x00838f));
+
+  // Rooftop solar panels — 3–4 thin flat dark blue boxes
+  const nPanels = 3 + Math.floor(rng() * 2);
+  for (let i = 0; i < nPanels; i++) {
+    const px = (i - (nPanels - 1) / 2) * (bW * 0.55 / nPanels);
+    addBox(g, bW * 0.40 / nPanels - 0.02, 0.03, bD * 0.45, px, yBot + mainH + 0.04, -bD * 0.10, solarMat);
+  }
+
+  // Two slim modern chimneys — thinner, taller, lighter colored
+  const chiH = 0.60;
+  addCyl(g,  0.03, 0.04, chiH,  bW * 0.30, yBot + mainH + chiH / 2, -bD * 0.30, chimneyMat, 6);
+  addCyl(g,  0.03, 0.04, chiH, -bW * 0.30, yBot + mainH + chiH / 2, -bD * 0.30, chimneyMat, 6);
+
+  // Server containers (small teal/blue cubes) instead of barrels
+  const cX = bW / 2 + 0.08;
+  const cZ = bD / 2 - 0.20;
+  for (let i = 0; i < 3; i++) {
+    addBox(g, 0.18, 0.18, 0.18, cX, yBot + 0.09, cZ - i * 0.22, containerMat);
+  }
+
+  return g;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1660,6 +2076,14 @@ export function createBuildingMesh(buildingId, seed = 0, plotW = 1, plotD = 1) {
   if (!def) throw new Error(`Unknown building id: ${buildingId}`);
 
   const rng = mkRand(seed);
+
+  // Mid/high density zone buildings — exact ID match wins over generic zoneType routing
+  if (buildingId === 'residential_mid')  return _createResidentialMidMesh(def, rng, plotW, plotD);
+  if (buildingId === 'residential_high') return _createResidentialHighMesh(def, rng, plotW, plotD);
+  if (buildingId === 'commercial_mid')   return _createCommercialMidMesh(def, rng, plotW, plotD);
+  if (buildingId === 'commercial_high')  return _createCommercialHighMesh(def, rng, plotW, plotD);
+  if (buildingId === 'industrial_mid')   return _createIndustrialMidMesh(def, rng, plotW, plotD);
+  if (buildingId === 'industrial_high')  return _createIndustrialHighMesh(def, rng, plotW, plotD);
 
   if (def.zoneType === 'R') return _createResidentialMesh(def, rng);
   if (def.zoneType === 'C') return _createCommercialMesh(def, rng, plotW, plotD);

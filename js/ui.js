@@ -3,7 +3,7 @@
  * DOM management: bottom HUD, toolbar state, info panel, notifications.
  * Knows nothing about Three.js internals.
  */
-import { getBuildingDef } from './buildings.js';
+import { getBuildingDef, UPGRADE_REQS } from './buildings.js';
 import { SPEED_PRESETS } from './city.js';
 
 // ── Tool state ───────────────────────────────────────────────────────────────
@@ -813,6 +813,20 @@ export function showTileInfo(tile) {
       rows.push(['🏡 Land Value',    _pbar(tile.landValue)]);
       rows.push(['⭐ Desirability',  _pbar(tile.desirability)]);
     }
+    // Upgrade progress info for zone buildings
+    if (def.zoneType && b) {
+      const upgradeReq = UPGRADE_REQS[b.id];
+      if (b.upgradeBlocked) {
+        rows.push(['⬆ Upgrade', '<span style="color:#ff9800">⚠️ Wants to upgrade — no room. Bulldoze neighbours.</span>']);
+      } else if (upgradeReq) {
+        if ((b.upgradeTimer ?? 0) > 0) {
+          rows.push(['⬆ Upgrade progress', _pbar(Math.round((b.upgradeTimer / upgradeReq.months) * 100))]);
+        } else {
+          rows.push(['⬆ Upgrade needs', `LV ${upgradeReq.landValue}+, Happiness ${upgradeReq.happiness}+`]);
+        }
+      }
+    }
+
     if (def.description) rows.push(['Info', def.description]);
   }
 
