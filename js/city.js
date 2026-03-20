@@ -67,6 +67,7 @@ const SAVE_VERSION      = 1;
 
 function _makeInitialState() {
   return {
+    cityName:            'My City',
     money:               100_000,
     population:          0,
     happiness:           50,
@@ -128,6 +129,11 @@ export class City extends EventEmitter {
     if (this._state.isPaused) return 0;
     const msPerHour = this._hourMs;
     return msPerHour > 0 ? 1000 / msPerHour : 0; // 1× = 1.0, 4× = 4.0, etc.
+  }
+
+  getCityName() { return this._state.cityName ?? 'My City'; }
+  setCityName(name) {
+    this._state.cityName = String(name).trim().slice(0, 40) || 'My City';
   }
 
   // ── Game speed control ───────────────────────────────────────────
@@ -328,46 +334,40 @@ export class City extends EventEmitter {
   saveGame(slot) {
     const key = this._saveKey(slot);
     try {
-      const gridData = this._grid.getAllTiles().map(tile => ({
-        x:           tile.x,
-        z:           tile.z,
-        type:        tile.type,
-        zoneType:    tile.zoneType,
-        terrainType: tile.terrainType,
-        isBridge:     tile.isBridge,
-        trafficLight: tile.trafficLight || false,
-        connected:    tile.connected,
-        desirability: tile.desirability,
-        pollution:   tile.pollution,
-        happiness:   tile.happiness,
-        landValue:   tile.landValue,
-        serviceCoverage: { ...tile.serviceCoverage },
-        building: tile.building ? {
-          type:            tile.building.id,
-          fillPercentage:  tile.building.fillPercentage,
-          residents:       tile.building.residents,
-          jobs:            tile.building.jobs,
-          level:           tile.building.level,
-          laborState:      tile.building.laborState,
-          laborStateTurns: tile.building.laborStateTurns,
-          recovering:      tile.building.recovering,
-          baseColor:       tile.building.baseColor,
-          tileX:           tile.building.tileX,
-          tileZ:           tile.building.tileZ,
-          // Plot-specific fields
-          plotWidth:       tile.building.plotWidth  ?? null,
-          plotDepth:       tile.building.plotDepth  ?? null,
-          plotRoadDir:     tile.building.plotRoadDir ?? null,
-          plotTiles:       tile.building.plotTiles  ?? null,
-          rotation:        tile.building.rotation   ?? 0,
-        } : null,
-      }));
+      const gridData = this._grid.getAllTiles().map(tile => {
+        const t = {
+          x:           tile.x,
+          z:           tile.z,
+          type:        tile.type,
+          zoneType:    tile.zoneType,
+          terrainType: tile.terrainType,
+          isBridge:    tile.isBridge     || false,
+          trafficLight: tile.trafficLight || false,
+        };
+        if (tile.building) {
+          t.building = {
+            type:            tile.building.id,
+            residents:       tile.building.residents,
+            jobs:            tile.building.jobs,
+            level:           tile.building.level,
+            laborState:      tile.building.laborState,
+            laborStateTurns: tile.building.laborStateTurns,
+            recovering:      tile.building.recovering,
+            plotWidth:       tile.building.plotWidth  ?? null,
+            plotDepth:       tile.building.plotDepth  ?? null,
+            plotRoadDir:     tile.building.plotRoadDir ?? null,
+            plotTiles:       tile.building.plotTiles  ?? null,
+            rotation:        tile.building.rotation   ?? 0,
+          };
+        }
+        return t;
+      });
 
       const savedAt = new Date().toISOString();
       const save = {
         version:  SAVE_VERSION,
         savedAt,
-        cityName: 'My City',
+        cityName: this._state.cityName ?? 'My City',
         snapshot: { ...this._state },
         grid:     gridData,
       };
@@ -375,7 +375,7 @@ export class City extends EventEmitter {
       localStorage.setItem(key, JSON.stringify(save));
       return { success: true, savedAt };
     } catch (e) {
-      return { success: false, error: e.message };
+      return { success: false, error: String(e) };
     }
   }
 
@@ -422,6 +422,7 @@ export class City extends EventEmitter {
       this._rciBreakdown = snap.rciResult?.breakdown ?? null;
       this._bootstrapSpawnedThisMonth = { R: false, C: false, I: false };
       this._dailyNetAccum = 0;
+      if (save.cityName) this._state.cityName = save.cityName;
 
       // Restore grid tiles (direct mutation — tile objects are mutable references)
       for (const saved of save.grid) {

@@ -1242,86 +1242,101 @@ function _createParkLarge(def) {
 
 function _createTennisCourt(def) {
   const g = new THREE.Group();
-  const y = def.height / 2;
 
-  // Court surface — teal/green clay
-  const courtMat = cachedMat(0x26a69a);
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.01, 1.74), courtMat), { position: new THREE.Vector3(0, y, 0) }));
+  // Court surface — teal/clay
+  const surface = new THREE.Mesh(
+    new THREE.BoxGeometry(1.74, 0.06, 1.74),
+    cachedMat(0x26a69a)
+  );
+  surface.position.set(0, 0.03, 0);
+  g.add(surface);
 
   // White boundary lines
   const lineMat = cachedMat(0xffffff);
   const hLine = (lx, lz, lw, ll) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.012, ll), lineMat);
-    m.position.set(lx, y + 0.006, lz); g.add(m);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.02, ll), lineMat);
+    m.position.set(lx, 0.065, lz);
+    g.add(m);
   };
-  // Outer boundary
-  hLine( 0,  0.82, 1.60, 0.02); hLine( 0, -0.82, 1.60, 0.02); // baselines
-  hLine( 0.79, 0, 0.02, 1.64); hLine(-0.79, 0, 0.02, 1.64);   // sidelines
-  // Service boxes
-  hLine( 0, 0.41, 1.60, 0.02); hLine( 0, -0.41, 1.60, 0.02);  // service lines
-  hLine( 0, 0, 0.02, 1.64);                                     // centre line
-  // Net (white bar + thin posts)
-  const netMat = cachedMat(0xe0e0e0);
-  const netMesh = new THREE.Mesh(new THREE.BoxGeometry(1.70, 0.06, 0.02), netMat);
-  netMesh.position.set(0, y + 0.04, 0); g.add(netMesh);
-  [-0.85, 0.85].forEach(px => {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.10, 0.02), cachedMat(0x888888));
-    post.position.set(px, y + 0.06, 0); g.add(post);
+  hLine( 0,  0.82, 1.60, 0.025); hLine( 0, -0.82, 1.60, 0.025); // baselines
+  hLine( 0.79, 0, 0.025, 1.64);  hLine(-0.79, 0, 0.025, 1.64);  // sidelines
+  hLine( 0, 0.41, 1.60, 0.025);  hLine( 0, -0.41, 1.60, 0.025); // service lines
+  hLine( 0, 0, 0.025, 1.64);                                      // centre line
+
+  // Net
+  const net = new THREE.Mesh(new THREE.BoxGeometry(1.70, 0.12, 0.025), cachedMat(0xe0e0e0));
+  net.position.set(0, 0.12, 0);
+  g.add(net);
+  [-0.86, 0.86].forEach(px => {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.20, 0.03), cachedMat(0x888888));
+    post.position.set(px, 0.15, 0);
+    g.add(post);
   });
+
   return g;
 }
 
 function _createFootballField(def) {
   const g = new THREE.Group();
-  const y = def.height / 2;
   const W = 2.78, D = 1.78;
 
-  // Pitch surface — dark green
-  const pitchMat = cachedMat(0x2e7d32);
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(W, 0.01, D), pitchMat), { position: new THREE.Vector3(0, y, 0) }));
+  // Pitch surface
+  const pitch = new THREE.Mesh(
+    new THREE.BoxGeometry(W, 0.06, D),
+    cachedMat(0x2e7d32)
+  );
+  pitch.position.set(0, 0.03, 0);
+  g.add(pitch);
 
-  // Alternating lighter stripes (subtle)
-  const stripeMat = cachedMat(0x388e3c);
-  for (let i = -1; i <= 1; i += 2) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.012, D), stripeMat);
-    s.position.set(i * 0.69, y + 0.006, 0); g.add(s);
-  }
+  // Lighter stripes
+  [-0.69, 0.69].forEach(ix => {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, D), cachedMat(0x388e3c));
+    s.position.set(ix, 0.03, 0);
+    g.add(s);
+  });
 
   // White markings
   const lm = cachedMat(0xffffff);
   const line = (lx, lz, lw, ll) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.015, ll), lm);
-    m.position.set(lx, y + 0.008, lz); g.add(m);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(lw, 0.02, ll), lm);
+    m.position.set(lx, 0.065, lz);
+    g.add(m);
   };
-  // Outer boundary
-  line(0,  D/2 - 0.01, W - 0.04, 0.02);
-  line(0, -D/2 + 0.01, W - 0.04, 0.02);
-  line( W/2 - 0.01, 0, 0.02, D - 0.04);
-  line(-W/2 + 0.01, 0, 0.02, D - 0.04);
-  // Centre line + circle
-  line(0, 0, 0.02, D - 0.04);
-  const circleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
-  const circle = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.20, 24), circleMat);
-  circle.rotation.x = -Math.PI / 2; circle.position.set(0, y + 0.009, 0); g.add(circle);
+  line(0,  D/2 - 0.01, W - 0.04, 0.025);
+  line(0, -D/2 + 0.01, W - 0.04, 0.025);
+  line( W/2 - 0.01, 0, 0.025, D - 0.04);
+  line(-W/2 + 0.01, 0, 0.025, D - 0.04);
+  line(0, 0, 0.025, D - 0.04); // centre line
+
+  // Centre circle
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.18, 0.21, 24),
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0, 0.068, 0);
+  g.add(ring);
+
   // Penalty boxes
-  [-W/2 + 0.20, W/2 - 0.20].forEach(bx => {
-    const sign = bx < 0 ? 1 : -1;
-    line(bx + sign * 0.095, 0, 0.02, 0.70);
-    line(bx + sign * 0.005, 0.35, 0.20, 0.02);
-    line(bx + sign * 0.005, -0.35, 0.20, 0.02);
+  [-W/2 + 0.20, W/2 - 0.20].forEach((bx, i) => {
+    const sign = i === 0 ? 1 : -1;
+    line(bx + sign * 0.10, 0, 0.025, 0.72);
+    line(bx + sign * 0.055, 0.36, 0.12, 0.025);
+    line(bx + sign * 0.055, -0.36, 0.12, 0.025);
   });
+
   // Goals
-  const goalMat = cachedMat(0xeeeeee);
-  [-W/2 - 0.05, W/2 + 0.05].forEach(gx => {
-    const goalFrame = new THREE.Group();
-    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.40), goalMat);
-    crossbar.position.set(0, y + 0.08, 0); goalFrame.add(crossbar);
+  [-W/2 - 0.04, W/2 + 0.04].forEach(gx => {
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.025, 0.40), cachedMat(0xeeeeee));
+    crossbar.position.set(gx, 0.14, 0);
+    g.add(crossbar);
     [-0.19, 0.19].forEach(gz => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.02), goalMat);
-      post.position.set(0, y + 0.04, gz); goalFrame.add(post);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.12, 0.025), cachedMat(0xeeeeee));
+      post.position.set(gx, 0.09, gz);
+      g.add(post);
     });
-    goalFrame.position.x = gx; g.add(goalFrame);
   });
+
   return g;
 }
 

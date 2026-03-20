@@ -141,8 +141,10 @@ function _applyButtonLabels(toolbar) {
   _bldgBtn('high_school',    '🏫', 'High School',   'Education in radius');
   _bldgBtn('university',     '🎓', 'University',    'Education in radius');
   _bldgBtn('park_small',     '🌳', 'Park S',        'Happiness boost in radius');
-  _bldgBtn('park_medium',    '🌳', 'Park M',        'Happiness boost in radius');
-  _bldgBtn('park_large',     '🌳', 'Park L',        'Happiness boost in radius');
+  _bldgBtn('park_medium',    '🌲', 'Park M',        'Happiness boost in radius');
+  _bldgBtn('park_large',     '🌲🌲', 'Park L',      'Happiness boost in radius');
+  _bldgBtn('tennis_court',   '🎾', 'Tennis',        'Happiness boost in radius');
+  _bldgBtn('football_field', '⚽', 'Football',      'Happiness boost in radius');
   _bldgBtn('road',           '🛣️', 'Road',          null);
   _bldgBtn('power_plant',    '⚡', 'Coal Plant',    null);
   _bldgBtn('water_pump',     '💧', 'Water Station', null);
@@ -432,6 +434,8 @@ export function initHUD(city) {
 }
 
 function _renderHUD(state, city) {
+  const cityNameDisplay = document.getElementById('city-name-display');
+  if (cityNameDisplay) cityNameDisplay.textContent = city.getCityName?.() ?? 'My City';
   _setText('stat-money',    `💰 €${_fmt(state.money)}`);
   const dayNet = state.lastDayNet ?? 0;
   const netEl  = document.getElementById('stat-monthly');
@@ -867,43 +871,58 @@ export function initNotifications(city) {
 // ── Speed controls ────────────────────────────────────────────────────────────
 
 /**
- * Inject ⏸/▶/▶▶/▶▶▶ speed buttons into the toolbar and keep them in sync.
+ * Wire speed buttons in the bottom bar and keep them in sync.
+ * Buttons are now static HTML (#btn-pause, #btn-speed-1/2/4).
  * @param {import('./city.js').City} city
  */
 export function initSpeedControls(city) {
-  const bar = document.getElementById('bottom-bar');
-  if (!bar) return;
+  // Map btn-speed-N to city speed presets
+  // 1× = normal (1000ms/hr), 2× = fast (250ms/hr), 4× = faster (83ms/hr)
+  const speedMap = { '1': 'normal', '2': 'fast', '4': 'faster' };
 
-  const group = document.createElement('div');
-  group.id        = 'speed-group';
-  group.className = 'speed-group';
-  group.innerHTML = `
-    <button data-speed="paused" title="⏸ Pause">⏸</button>
-    <button data-speed="normal" title="▶ 1× — Watch traffic (1s = 1 hr)">1×</button>
-    <button data-speed="fast"   title="▶▶ 4× — Fast">4×</button>
-    <button data-speed="faster" title="▶▶▶ 12× — Fastest">12×</button>
-  `;
-
-  // Insert just before the RCI bars so it sits at the right end of the bar.
-  const rciEl = bar.querySelector('.rci-bars');
-  if (rciEl) bar.insertBefore(group, rciEl);
-  else bar.appendChild(group);
-
-  group.querySelectorAll('[data-speed]').forEach(btn => {
-    btn.addEventListener('click', () => city.setGameSpeed(btn.dataset.speed));
+  ['1', '2', '4'].forEach(s => {
+    const btn = document.getElementById(`btn-speed-${s}`);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      city.setGameSpeed(speedMap[s]);
+    });
   });
 
+  const btnPause = document.getElementById('btn-pause');
+  if (btnPause) {
+    btnPause.addEventListener('click', () => city.togglePause());
+  }
+
   const syncHighlight = (state) => {
-    group.querySelectorAll('[data-speed]').forEach(btn => {
-      const active = state.isPaused
-        ? btn.dataset.speed === 'paused'
-        : btn.dataset.speed === state.gameSpeed;
-      btn.classList.toggle('speed-active', active);
+    // Update speed buttons
+    ['1', '2', '4'].forEach(s => {
+      const btn = document.getElementById(`btn-speed-${s}`);
+      if (!btn) return;
+      const active = !state.isPaused && state.gameSpeed === speedMap[s];
+      btn.classList.toggle('active', active);
     });
+    // Update pause button icon
+    if (btnPause) {
+      btnPause.textContent = state.isPaused ? '▶' : '⏸';
+    }
   };
 
   city.on('speedChanged', syncHighlight);
   syncHighlight(city.getState());
+
+  // City name edit
+  const cityNameDisplay = document.getElementById('city-name-display');
+  const btnEditName = document.getElementById('btn-edit-city-name');
+  if (btnEditName && cityNameDisplay) {
+    btnEditName.addEventListener('click', () => {
+      const current = city.getCityName?.() ?? 'My City';
+      const name = prompt('Enter city name:', current);
+      if (name !== null) {
+        city.setCityName?.(name);
+        cityNameDisplay.textContent = city.getCityName?.() ?? 'My City';
+      }
+    });
+  }
 }
 
 // ── Pause menu ────────────────────────────────────────────────────────────────
@@ -1006,7 +1025,12 @@ export function initPauseMenu(city) {
       const blob = new Blob([data], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url; a.download = `citybuilder_save.json`; a.click();
+      a.href = url;
+      const si = city.getSaveInfo(bestSlot);
+      const pop = si?.population ?? 0;
+      const name = (city.getCityName?.() ?? 'city').replace(/\s+/g, '_');
+      a.download = `${name}_${si?.date ?? 'save'}_pop${pop}.json`;
+      a.click();
       URL.revokeObjectURL(url);
     });
   }
@@ -1085,7 +1109,11 @@ function _renderSlots(container, city, mode) {
       btn.textContent = info.exists ? 'Overwrite' : 'Save';
       btn.addEventListener('click', () => {
         const result = city.saveGame(slot);
-        if (result.success) _renderSlots(container, city, mode);
+        if (result.success) {
+          _renderSlots(container, city, mode);
+        } else {
+          alert('Save failed: ' + (result.error ?? 'unknown error'));
+        }
       });
     } else {
       btn.textContent = 'Load';
