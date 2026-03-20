@@ -652,7 +652,7 @@ function _refreshDebug() {
   const rciZoneRows = (zoneKey, demand) => {
     const zBd = bd?.[zoneKey];
     const zoneName = _ZONE_LABELS[zoneKey] ?? zoneKey.toUpperCase();
-    if (!zBd) return row(zoneName, `${demand}%`);
+    if (!zBd) return prow(zoneName, demand);
     const floorActive = zBd.floor > 0 && demand <= zBd.floor;
     const factorRows = Object.entries(zBd)
       .filter(([, v]) => v !== null && typeof v === 'object' && 'score' in v)
@@ -666,7 +666,7 @@ function _refreshDebug() {
     const floorRow = floorActive
       ? `<div class="dbg-row"><span class="dbg-label" style="padding-left:8px;color:#555">🔰 bootstrap floor active</span></div>`
       : '';
-    return row(zoneName, `${demand}%`) + factorRows + floorRow;
+    return prow(zoneName, demand) + factorRows + floorRow;
   };
 
   body.innerHTML = [
@@ -770,7 +770,7 @@ export function showTileInfo(tile) {
     title.textContent = `${tile.zoneType} Zone (empty)`;
     rows.push(['Zone',              tile.zoneType]);
     rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
-    rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
+    rows.push(['😊 Happiness',     _pbar(tile.happiness)]);
     rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
     rows.push(['🏡 Land Value',    _pbar(tile.landValue)]);
     rows.push(['⭐ Desirability',  _pbar(tile.desirability)]);
@@ -802,13 +802,13 @@ export function showTileInfo(tile) {
       const avgPollution  = plotTiles.reduce((s, pt) => s + (pt.pollution  ?? 0), 0) / plotTiles.length;
       const avgLandValue  = plotTiles.reduce((s, pt) => s + (pt.landValue  ?? 0), 0) / plotTiles.length;
       const avgDesirability = plotTiles.reduce((s, pt) => s + (pt.desirability ?? 0), 0) / plotTiles.length;
-      rows.push(['😊 Happiness',   `${Math.round(avgHappiness)}%`]);
+      rows.push(['😊 Happiness',   _pbar(avgHappiness)]);
       rows.push(['🏭 Pollution',   avgPollution <= 20 ? 'Low' : avgPollution <= 50 ? 'Medium' : 'High']);
       rows.push(['🏡 Land Value',  _pbar(avgLandValue)]);
       rows.push(['⭐ Desirability', _pbar(avgDesirability)]);
     } else {
       rows.push(['🛣️ Road access',   tile.connected ? 'Yes ✓' : 'No ✗']);
-      rows.push(['😊 Happiness',     `${Math.round(tile.happiness)}%`]);
+      rows.push(['😊 Happiness',     _pbar(tile.happiness)]);
       rows.push(['🏭 Pollution',     tile.pollution <= 20 ? 'Low' : tile.pollution <= 50 ? 'Medium' : 'High']);
       rows.push(['🏡 Land Value',    _pbar(tile.landValue)]);
       rows.push(['⭐ Desirability',  _pbar(tile.desirability)]);
@@ -1133,7 +1133,11 @@ function _renderSlots(container, city, mode) {
       btn.disabled = !info.exists;
       if (info.exists) {
         btn.addEventListener('click', () => {
-          city.loadGame(slot);
+          const result = city.loadGame(slot);
+          if (!result.success) {
+            alert('Load failed: ' + (result.error ?? 'unknown error'));
+            return;
+          }
           _forceHidePauseMenu();
         });
       }

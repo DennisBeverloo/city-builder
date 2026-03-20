@@ -392,16 +392,19 @@ export class City extends EventEmitter {
    * @param {1|2|3|'autosave'} slot
    * @returns {{ success: boolean, error?: string }}
    */
-  loadGame(slot) {
-    const key = this._saveKey(slot);
+  /**
+   * Internal: apply a parsed save object to the live game state.
+   * Accepts any save version ≤ SAVE_VERSION (backward-compatible with v1).
+   * Emits 'gameLoaded', 'stateChanged', 'dayTick' on success.
+   */
+  _applyGameData(save) {
+    // Accept both the current and any older version (never reject saves that
+    // are older than the current format — they load fine because we reset all
+    // tiles to defaults first and then apply only what's in the save array).
+    if (!save.version || save.version > SAVE_VERSION)
+      return { success: false, error: `Incompatible save format (version ${save.version ?? '?'})` };
+
     try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return { success: false, error: 'No save found' };
-
-      const save = JSON.parse(raw);
-      if (!save.version || save.version !== SAVE_VERSION)
-        return { success: false, error: 'Incompatible save format' };
-
       // Collect current forest tiles (for scene to clear old tree meshes)
       const oldForestTiles = this._grid.getAllTiles()
         .filter(t => t.terrainType === 'forest')
@@ -432,8 +435,7 @@ export class City extends EventEmitter {
       this._dailyNetAccum = 0;
       if (save.cityName) this._state.cityName = save.cityName;
 
-      // Sparse grid restore: reset every tile to empty defaults first,
-      // then apply only the tiles that are present in the save array.
+      // Reset every tile to empty defaults, then apply sparse save array
       for (const tile of this._grid.getAllTiles()) {
         tile.type         = 'empty';
         tile.zoneType     = null;
@@ -509,6 +511,19 @@ export class City extends EventEmitter {
 
       return { success: true };
     } catch (e) {
+      console.error('_applyGameData error:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  loadGame(slot) {
+    const key = this._saveKey(slot);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { success: false, error: 'No save found' };
+      const save = JSON.parse(raw);
+      return this._applyGameData(save);
+    } catch (e) {
       console.error('loadGame error:', e);
       return { success: false, error: e.message };
     }
@@ -546,22 +561,29 @@ export class City extends EventEmitter {
     return data ?? null;
   }
 
-  /** Import a save from a JSON string (file upload). Validates version. */
+  /**
+   * Import a save from a JSON string (file upload).
+   * Accepts any version ≤ SAVE_VERSION (including v1 large-format saves).
+   * After applying, re-saves to slot 1 with current sparse encoding so future
+   * saves don't hit QuotaExceededError.
+   */
   importSave(jsonString) {
-    const CURRENT_VERSION = 1;
     let obj;
     try { obj = JSON.parse(jsonString); }
     catch { return { success: false, error: 'Invalid file: not valid JSON.' }; }
     if (!obj?.version) return { success: false, error: 'Invalid save file: missing version.' };
-    if (obj.version !== CURRENT_VERSION)
-      return { success: false, error: `Save version ${obj.version} is not compatible (expected ${CURRENT_VERSION}).` };
-    // Load into slot 1, overwriting it
-    try {
-      localStorage.setItem(this._saveKey(1), jsonString);
-      return this.loadGame(1);
-    } catch (e) {
-      return { success: false, error: String(e) };
-    }
+    if (obj.version > SAVE_VERSION)
+      return { success: false, error: `Save is from a newer game version (v${obj.version}). Please update the game.` };
+
+    // Apply directly from the parsed object — never writes the raw (possibly huge)
+    // JSON to localStorage, avoiding QuotaExceededError from old bloated saves.
+    const result = this._applyGameData(obj);
+    if (!result.success) return result;
+
+    // Re-persist with current sparse encoding so future autosaves stay small.
+    const reEncoded = this.saveGame(1);
+    if (!reEncoded.success) console.warn('Import: re-save to slot 1 failed:', reEncoded.error);
+    return { success: true };
   }
 
   /**

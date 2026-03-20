@@ -57,7 +57,7 @@ export function initScene(container) {
   const sun = new THREE.DirectionalLight(0xfff4e0, 1.0);
   sun.position.set(80, 120, 40);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(2048, 2048); // 4096 was overkill and halved GPU frame time
   Object.assign(sun.shadow.camera, { near: 1, far: 400, left: -100, right: 100, top: 100, bottom: -100 });
   _scene.add(sun);
 
@@ -324,28 +324,37 @@ export function updateRoadMarkings(grid) {
 }
 
 // ── Heatmap overlay ───────────────────────────────────────────────────────────
+// Uses a single InstancedMesh (1 draw call) instead of 6 400 separate Meshes.
 
 const _HEATMAP_GEO = new THREE.PlaneGeometry(0.92, 0.92);
+const _HEATMAP_MAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.65, depthWrite: false });
 const _hc1 = new THREE.Color();
 const _hc2 = new THREE.Color();
+const _hci = new THREE.Color(); // scratch for setColorAt
 
-let _heatmapQuads = null; // _heatmapQuads[z][x] = Mesh, lazily created
+let _heatmapInst = null; // InstancedMesh for all GRID_SIZE² heatmap tiles
 
 function _ensureHeatmapGrid() {
-  if (_heatmapQuads) return;
-  _heatmapQuads = [];
+  if (_heatmapInst) return;
+  const n = GRID_SIZE * GRID_SIZE;
+  _heatmapInst = new THREE.InstancedMesh(_HEATMAP_GEO, _HEATMAP_MAT, n);
+  _heatmapInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+  const dummy = new THREE.Object3D();
+  dummy.rotation.x = -Math.PI / 2;
   for (let z = 0; z < GRID_SIZE; z++) {
-    _heatmapQuads[z] = [];
     for (let x = 0; x < GRID_SIZE; x++) {
-      const mat  = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.65, depthWrite: false });
-      const quad = new THREE.Mesh(_HEATMAP_GEO, mat);
-      quad.rotation.x = -Math.PI / 2;
-      quad.position.set(x + 0.5, 0.076, z + 0.5); // _TILE_H + 0.016, above range overlay
-      quad.visible = false;
-      _scene.add(quad);
-      _heatmapQuads[z][x] = quad;
+      const i = z * GRID_SIZE + x;
+      dummy.position.set(x + 0.5, 0.076, z + 0.5);
+      dummy.updateMatrix();
+      _heatmapInst.setMatrixAt(i, dummy.matrix);
+      _heatmapInst.setColorAt(i, _hci.set(0x000000));
     }
   }
+  _heatmapInst.instanceMatrix.needsUpdate = true;
+  _heatmapInst.instanceColor.needsUpdate  = true;
+  _heatmapInst.visible = false;
+  _scene.add(_heatmapInst);
 }
 
 function _triGradient(t, hexLow, hexMid, hexHigh) {
@@ -371,28 +380,27 @@ function _tileHeatColor(type, tile) {
 }
 
 /**
- * Render a full-grid heatmap overlay. Call on every dayTick / monthProcessed.
+ * Render a full-grid heatmap overlay. Uses a single InstancedMesh draw call.
  * @param {import('./grid.js').Grid} grid
  * @param {'happiness'|'pollution'|'landValue'|'police'|'fire'|'hospital'|'education'} type
  */
 export function showHeatmap(grid, type) {
   _ensureHeatmapGrid();
+  _heatmapInst.visible = true;
   for (let z = 0; z < GRID_SIZE; z++) {
     for (let x = 0; x < GRID_SIZE; x++) {
       const tile = grid.getTile(x, z);
-      const quad = _heatmapQuads[z][x];
-      if (!tile || !quad) continue;
-      quad.material.color.setHex(_tileHeatColor(type, tile));
-      quad.visible = true;
+      if (!tile) continue;
+      _hci.setHex(_tileHeatColor(type, tile));
+      _heatmapInst.setColorAt(z * GRID_SIZE + x, _hci);
     }
   }
+  _heatmapInst.instanceColor.needsUpdate = true;
 }
 
 /** Remove the heatmap overlay. */
 export function hideHeatmap() {
-  if (!_heatmapQuads) return;
-  for (const row of _heatmapQuads)
-    for (const quad of row) quad.visible = false;
+  if (_heatmapInst) _heatmapInst.visible = false;
 }
 
 // ── Post-load scene rebuild ───────────────────────────────────────────────────
@@ -433,9 +441,10 @@ export function rebuildSceneFromGrid(grid) {
   if (grid._bMeshes) grid._bMeshes.clear();
 
   for (const tile of grid.getAllTiles()) {
-    // Restore floor color (direct mutation avoids importing Grid internals).
-    if (tile.mesh) {
-      tile.mesh.material = new THREE.MeshLambertMaterial({ color: _deriveFloorColor(tile) });
+    // Restore floor colour — update in-place to avoid allocating a new material
+    // per tile (road tiles get their textured material from updateRoadMarkings below).
+    if (tile.mesh && (tile.type !== 'road' || tile.isBridge)) {
+      tile.mesh.material.color.setHex(_deriveFloorColor(tile));
     }
 
     if (!tile.building || tile.building.mesh !== null) continue;

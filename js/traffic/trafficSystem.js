@@ -51,6 +51,39 @@ const HOUR_TRAFFIC_TYPE = [
 // Personal car variants
 const PERSONAL_VARIANTS = ['sedan','hatchback','pickup','sports'];
 
+// ── Spatial hash for O(1) collision lookups ───────────────────────────────────
+
+/** Cell size in world tiles — must be ≥ the _isBlocked detection radius (1.2). */
+const _HASH_CELL = 2;
+
+class _SpatialHash {
+  constructor() { this._m = new Map(); }
+
+  /** Integer cell key for a world-space position. */
+  _k(x, z) { return `${(x / _HASH_CELL) | 0},${(z / _HASH_CELL) | 0}`; }
+
+  clear() { this._m.clear(); }
+
+  add(car) {
+    const k = this._k(car.mesh.position.x, car.mesh.position.z);
+    let c = this._m.get(k);
+    if (!c) { c = []; this._m.set(k, c); }
+    c.push(car);
+  }
+
+  /** Returns all cars in the 3×3 cell neighbourhood around (x, z). */
+  nearby(x, z) {
+    const cx = (x / _HASH_CELL) | 0, cz = (z / _HASH_CELL) | 0;
+    const out = [];
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const c = this._m.get(`${cx + dx},${cz + dz}`);
+        if (c) for (const car of c) out.push(car);
+      }
+    return out;
+  }
+}
+
 // ── Car class ─────────────────────────────────────────────────────────────────
 
 /** Real-milliseconds a car may be blocked by another car before despawning.
@@ -92,6 +125,7 @@ export class TrafficSystem {
     this._busAccum    = 0;     // school bus spawn accumulator
     this._trafficLights = null;  // TrafficLightSystem reference
     this._lastIsNight = null;
+    this._spatialHash = new _SpatialHash(); // rebuilt each tick for O(1) collision
   }
 
   /**
@@ -148,6 +182,12 @@ export class TrafficSystem {
     // Try to spawn cars based on hour demand
     this._trySpawn(dt, gameHour, speedMult, cityState);
     this._trySpawnBus(dt, gameHour, speedMult, cityState);
+
+    // Rebuild spatial hash — O(n) once per frame; makes _isBlocked O(1) per car
+    this._spatialHash.clear();
+    for (const car of this._cars) {
+      if (car.state !== 'done' && car.state !== 'parked') this._spatialHash.add(car);
+    }
 
     // Update all active cars
     for (const car of this._cars) {
@@ -570,7 +610,9 @@ export class TrafficSystem {
     const dirX = to.x - from.x;
     const dirZ = to.z - from.z;
 
-    for (const other of this._cars) {
+    // Spatial hash gives only the ~9 nearby cells instead of all N cars — O(1)
+    const nearby = this._spatialHash.nearby(car.mesh.position.x, car.mesh.position.z);
+    for (const other of nearby) {
       if (other === car || other.state === 'parked' || other.state === 'done') continue;
 
       const dx   = other.mesh.position.x - car.mesh.position.x;

@@ -132,7 +132,10 @@ export class Grid {
   }
 
   _setTileColor(tile, color) {
-    tile.mesh.material = new THREE.MeshLambertMaterial({ color });
+    // Update the existing material colour in-place — avoids allocating a new
+    // MeshLambertMaterial on every paint operation (was a major memory leak and
+    // prevented Three.js from batching tiles with the same material).
+    tile.mesh.material.color.setHex(color);
   }
 
   _restoreColor(tile) {
@@ -486,21 +489,43 @@ export class Grid {
       .filter(Boolean);
   }
 
-  /** @returns {Array<{tile, dist}>} */
+  /**
+   * Returns all tiles within Manhattan distance `radius` of (cx, cz).
+   * Offsets are cached by radius so the distance loop only runs once per
+   * unique radius value (common for service buildings that share radii).
+   * @returns {Array<{tile, dist}>}
+   */
   getTilesInRadius(cx, cz, radius) {
-    const out = [];
-    const x0 = Math.max(0,             Math.floor(cx - radius));
-    const x1 = Math.min(this.size - 1, Math.ceil (cx + radius));
-    const z0 = Math.max(0,             Math.floor(cz - radius));
-    const z1 = Math.min(this.size - 1, Math.ceil (cz + radius));
-    for (let z = z0; z <= z1; z++) {
-      for (let x = x0; x <= x1; x++) {
-        const dist = Math.abs(x - cx) + Math.abs(z - cz);
-        if (dist <= radius) out.push({ tile: this._tiles[z][x], dist });
+    // Build (and cache) the offset table for this radius if not already done.
+    let offsets = Grid._radiusOffsetCache.get(radius);
+    if (!offsets) {
+      offsets = [];
+      const r = Math.ceil(radius);
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          // Use exact Manhattan distance from (0,0) → works for integer cx/cz.
+          // For fractional centres we compute exact dist below.
+          const d = Math.abs(dx) + Math.abs(dz);
+          if (d <= radius) offsets.push({ dx, dz, d });
+        }
       }
+      Grid._radiusOffsetCache.set(radius, offsets);
+    }
+
+    const out = [];
+    const icx = Math.round(cx), icz = Math.round(cz);
+    for (const { dx, dz } of offsets) {
+      const x = icx + dx, z = icz + dz;
+      if (x < 0 || x >= this.size || z < 0 || z >= this.size) continue;
+      // Recompute exact dist from fractional centre for falloff accuracy
+      const dist = Math.abs((x) - cx) + Math.abs((z) - cz);
+      if (dist <= radius) out.push({ tile: this._tiles[z][x], dist });
     }
     return out;
   }
+
+  /** Shared offset cache across all Grid instances, keyed by radius value. */
+  static _radiusOffsetCache = new Map();
 
   // ── Service coverage ─────────────────────────────────────────────
 
