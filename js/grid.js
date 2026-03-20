@@ -690,20 +690,27 @@ export class Grid {
     // 4d: Per-tile happiness — fresh computation this tick
     this._applyTileHappiness();
 
-    // 4e: Zone upgrade checks
+    return {};
+  }
+
+  /**
+   * Daily upgrade tick — checks all anchor buildings for upgrade eligibility.
+   * @returns {{ upgrades: object[], blocked: object[], unblocked: object[] }}
+   */
+  tickDailyUpgrades() {
     const upgrades = [], blocked = [], unblocked = [];
-    for (const t of tiles) {
+    for (const t of this.getAllTiles()) {
       const b = t.building;
       if (!b) continue;
       // Only process anchor tiles
-      if (t.x !== b.tileX || t.z !== b.tileZ) continue;
+      if (b.tileX !== t.x || b.tileZ !== t.z) continue;
       const req = UPGRADE_REQS[b.id];
-      if (!req) continue; // max level or not a zone building
+      if (!req) continue; // max level or not upgradeable
 
       const condMet = t.landValue >= req.landValue && t.happiness >= req.happiness;
       if (condMet) {
         b.upgradeTimer = (b.upgradeTimer ?? 0) + 1;
-        if (b.upgradeTimer >= req.months) {
+        if (b.upgradeTimer >= req.days) {
           const plot = this.findBestUpgradePlot(t, req.next);
           if (plot) {
             upgrades.push({ anchorX: b.tileX, anchorZ: b.tileZ, newId: req.next, plot });
@@ -713,7 +720,7 @@ export class Grid {
             blocked.push({ anchorX: b.tileX, anchorZ: b.tileZ });
           }
           // Cap timer when blocked — don't keep incrementing
-          b.upgradeTimer = Math.min(b.upgradeTimer, req.months);
+          b.upgradeTimer = Math.min(b.upgradeTimer, req.days);
         }
       } else {
         b.upgradeTimer = Math.max(0, (b.upgradeTimer ?? 0) - 1);
@@ -723,7 +730,6 @@ export class Grid {
         }
       }
     }
-
     return { upgrades, blocked, unblocked };
   }
 
@@ -927,7 +933,7 @@ export class Grid {
       plotWidth: plot.width, plotDepth: plot.depth,
       plotRoadDir: plot.roadDir,
       plotTiles: plot.tiles.map(t => this.getTile(t.x, t.z)).filter(Boolean),
-      upgradeTimer:   0,
+      upgradeTimer:   Math.floor(Math.random() * (UPGRADE_REQS[buildingId]?.days ?? 10) * 0.4),
       upgradeBlocked: false,
     };
 

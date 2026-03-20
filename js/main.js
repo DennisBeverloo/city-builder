@@ -47,7 +47,8 @@ city.on('laborStateChanged', applyLaborStateColors);
 
 // ── Building animation events ─────────────────────────────────────────────────
 
-city.on('buildingDemolished', ({ mesh }) => {
+city.on('buildingDemolished', ({ mesh, anchorX, anchorZ }) => {
+  if (anchorX != null) _removeUpgradeIcon(anchorX, anchorZ);
   cancelAnimation(mesh);
   animateDemolish(mesh, () => scene.remove(mesh));
 });
@@ -64,6 +65,14 @@ city.on('buildingUpgraded', ({ anchorX, anchorZ, oldMesh, newId }) => {
   const anchorTile = grid.getTile(anchorX, anchorZ);
   if (anchorTile?.building?.mesh) {
     animateRise(anchorTile.building.mesh);
+  }
+  // Refresh info panel if selected tile is within the upgraded building
+  if (_selectedTile != null) {
+    const selB = _selectedTile.building;
+    if ((selB && selB.tileX === anchorX && selB.tileZ === anchorZ) ||
+        (_selectedTile.x === anchorX && _selectedTile.z === anchorZ)) {
+      setTimeout(() => showTileInfo(_selectedTile), 50);
+    }
   }
 });
 

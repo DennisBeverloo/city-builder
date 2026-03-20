@@ -116,6 +116,7 @@ export class City extends EventEmitter {
     this._hourTimer = 0;
     this._hourMs    = SPEED_PRESETS.normal;
     this._dailyNetAccum = 0;
+    this._pendingUpgrades = [];
   }
 
   // ── Public getters ───────────────────────────────────────────────
@@ -208,14 +209,32 @@ export class City extends EventEmitter {
     const isMonthEnd = d.day > 30;
 
     if (isMonthEnd) {
-      const { upgrades, blocked, unblocked } = this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
+      this._grid.runMonthlyTileCalcs(SIMULATION_CONFIG);
+    }
+
+    // Daily upgrade tick — check all buildings every day
+    {
+      const { upgrades, blocked, unblocked } = this._grid.tickDailyUpgrades();
+      // Scatter ready upgrades 0–5 days so they don't all fire simultaneously
       for (const u of upgrades) {
-        const oldMesh = this._grid.executeUpgrade(u.anchorX, u.anchorZ, u.newId, u.plot);
-        this.emit('buildingUpgraded', { anchorX: u.anchorX, anchorZ: u.anchorZ, oldMesh, newId: u.newId });
+        this._pendingUpgrades.push({ ...u, daysLeft: Math.floor(Math.random() * 6) });
       }
       for (const b of blocked)   this.emit('buildingUpgradeBlocked',   { anchorX: b.anchorX, anchorZ: b.anchorZ });
       for (const u of unblocked) this.emit('buildingUpgradeUnblocked', { anchorX: u.anchorX, anchorZ: u.anchorZ });
     }
+
+    // Process pending upgrades — decrement countdown, execute when ready
+    const stillPending = [];
+    for (const u of this._pendingUpgrades) {
+      u.daysLeft--;
+      if (u.daysLeft <= 0) {
+        const oldMesh = this._grid.executeUpgrade(u.anchorX, u.anchorZ, u.newId, u.plot);
+        this.emit('buildingUpgraded', { anchorX: u.anchorX, anchorZ: u.anchorZ, oldMesh, newId: u.newId });
+      } else {
+        stillPending.push(u);
+      }
+    }
+    this._pendingUpgrades = stillPending;
 
     // Grow residential fill percentages every day (1/30 of monthly rate)
     this._updateFillPercentages(SIMULATION_CONFIG.fillGrowthRatePerMonth / 30);
@@ -1153,7 +1172,7 @@ export class City extends EventEmitter {
       this._refreshResourceStats();
       this._emitLayout();
       // Emit demolish event so main.js can animate
-      if (bMesh) this.emit('buildingDemolished', { mesh: bMesh });
+      if (bMesh) this.emit('buildingDemolished', { mesh: bMesh, anchorX: x, anchorZ: z });
       // After a short delay, check if nearby blocked upgrades can now proceed
       const cx = x, cz = z;
       setTimeout(() => {

@@ -286,12 +286,12 @@ export const BUILDINGS = {
 
 /** Requirements for automatic zone density upgrades. */
 export const UPGRADE_REQS = {
-  residential_low:  { next: 'residential_mid',  landValue: 25, happiness: 55, months: 4 },
-  residential_mid:  { next: 'residential_high', landValue: 55, happiness: 70, months: 8 },
-  commercial_low:   { next: 'commercial_mid',   landValue: 25, happiness: 55, months: 4 },
-  commercial_mid:   { next: 'commercial_high',  landValue: 55, happiness: 70, months: 8 },
-  industrial_low:   { next: 'industrial_mid',   landValue: 20, happiness: 50, months: 4 },
-  industrial_mid:   { next: 'industrial_high',  landValue: 50, happiness: 65, months: 8 },
+  residential_low:  { next: 'residential_mid',  landValue: 25, happiness: 55, days: 10 },
+  residential_mid:  { next: 'residential_high', landValue: 55, happiness: 70, days: 20 },
+  commercial_low:   { next: 'commercial_mid',   landValue: 25, happiness: 55, days: 10 },
+  commercial_mid:   { next: 'commercial_high',  landValue: 55, happiness: 70, days: 20 },
+  industrial_low:   { next: 'industrial_mid',   landValue: 20, happiness: 50, days: 10 },
+  industrial_mid:   { next: 'industrial_high',  landValue: 50, happiness: 65, days: 20 },
 };
 
 /** Valid plot [width, depth] for each building type — sorted largest area first. */
@@ -729,63 +729,40 @@ function _createResidentialMidMesh(def, rng) {
   const yTop =  h / 2;
   const variant = rng() < 0.5 ? 0 : 1;
 
-  if (variant === 0) {
-    // Variant A: Two stacked boxes — ground floor slightly wider, flat roof with parapet, balcony strips
-    const wallMat    = cachedMat(pick(rng, [0xfff8dc, 0xe8f5e9, 0xe3f2fd, 0xeceff1, 0xfafafa]));
-    const upperMat   = cachedMat(pick(rng, [0xc8e6c9, 0xbbdefb, 0xdce775, 0xffe0b2]));
-    const roofMat    = cachedMat(pick(rng, [0x455a64, 0x37474f, 0x546e7a]));
-    const balconyMat = cachedMat(0x78909c);
+  const wallMat   = cachedMat(pick(rng, WALL_COLORS));
+  const roofMat   = cachedMat(0x37474f);
+  const doorMat   = cachedMat(pick(rng, DOOR_COLORS));
+  const accentMat = cachedMat(pick(rng, [0x546e7a, 0x455a64, 0x78909c, 0x1565c0]));
 
-    // Ground floor
-    addBox(g, 0.80, 0.55, 0.72, 0, yBot + 0.275, 0, wallMat);
-    // Upper 2 floors (slightly narrower)
-    addBox(g, 0.72, 0.90, 0.64, 0, yBot + 0.55 + 0.45, 0, upperMat);
-    // Flat roof slab
-    addBox(g, 0.74, 0.04, 0.66, 0, yBot + h - 0.02, 0, roofMat);
-    // Parapet strips
-    addBox(g, 0.74, 0.06, 0.04, 0,     yTop + 0.01,  0.32, roofMat);
-    addBox(g, 0.74, 0.06, 0.04, 0,     yTop + 0.01, -0.32, roofMat);
-    addBox(g, 0.04, 0.06, 0.66,  0.37, yTop + 0.01,  0, roofMat);
-    addBox(g, 0.04, 0.06, 0.66, -0.37, yTop + 0.01,  0, roofMat);
-    // Balcony strips on upper floors
-    addBox(g, 0.74, 0.03, 0.06, 0, yBot + 0.55 + 0.30, 0.35, balconyMat);
-    addBox(g, 0.74, 0.03, 0.06, 0, yBot + 0.55 + 0.70, 0.35, balconyMat);
-    // Windows — ground floor south
-    addBox(g, 0.14, 0.18, 0.012, -0.22, yBot + 0.30, 0.361, M.window);
-    addBox(g, 0.14, 0.18, 0.012,  0.22, yBot + 0.30, 0.361, M.window);
-    // Windows — upper floors south
-    addBox(g, 0.12, 0.14, 0.012, -0.22, yBot + 0.85, 0.321, M.window);
-    addBox(g, 0.12, 0.14, 0.012,  0.00, yBot + 0.85, 0.321, M.window);
-    addBox(g, 0.12, 0.14, 0.012,  0.22, yBot + 0.85, 0.321, M.window);
-    addBox(g, 0.12, 0.14, 0.012, -0.22, yBot + 1.22, 0.321, M.window);
-    addBox(g, 0.12, 0.14, 0.012,  0.00, yBot + 1.22, 0.321, M.window);
-    addBox(g, 0.12, 0.14, 0.012,  0.22, yBot + 1.22, 0.321, M.window);
-    // Door south
-    addBox(g, 0.10, 0.22, 0.012, 0, yBot + 0.15, 0.362, cachedMat(pick(rng, DOOR_COLORS)));
-  } else {
-    // Variant B: L-shaped plan — two overlapping BoxGeometry at 90°, different heights
-    const wallMatA = cachedMat(pick(rng, WALL_COLORS));
-    const wallMatB = cachedMat(pick(rng, WALL_COLORS));
-    const roofMat  = cachedMat(pick(rng, [0x455a64, 0x37474f, 0x607d8b]));
-    const doorMat  = cachedMat(pick(rng, DOOR_COLORS));
+  // Single main block
+  addBox(g, 0.82, h, 0.74, 0, 0, 0, wallMat);
 
-    // Main tall wing
-    addBox(g, 0.76, h, 0.44, 0, 0, -0.14, wallMatA);
-    // Side shorter wing — perpendicular
-    addBox(g, 0.38, h * 0.72, 0.62, 0.19, yBot + h * 0.36, 0.19, wallMatB);
-    // Roofs
-    addBox(g, 0.78, 0.04, 0.46, 0,    yTop,               -0.14, roofMat);
-    addBox(g, 0.40, 0.04, 0.64, 0.19, yBot + h * 0.72 + 0.02, 0.19, roofMat);
-    // Pitched roof on shorter wing (simple triangle approximation with box)
-    addBox(g, 0.40, 0.12, 0.04, 0.19, yBot + h * 0.72 + 0.06, -0.14, roofMat);
-    // Windows — main wing south
-    addBox(g, 0.14, 0.16, 0.012, -0.20, yBot + 0.40, 0.083, M.window);
-    addBox(g, 0.14, 0.16, 0.012,  0.10, yBot + 0.40, 0.083, M.window);
-    addBox(g, 0.14, 0.16, 0.012, -0.20, yBot + 1.00, 0.083, M.window);
-    addBox(g, 0.14, 0.16, 0.012,  0.10, yBot + 1.00, 0.083, M.window);
-    // Door — side wing south
-    addBox(g, 0.10, 0.22, 0.012, 0.19, yBot + 0.16, 0.51, doorMat);
+  // Flat roof slab sitting directly on top (slightly wider to overhang)
+  addBox(g, 0.84, 0.04, 0.76, 0, yTop + 0.02, 0, roofMat);
+
+  // Thin parapet strips (front and back only)
+  addBox(g, 0.86, 0.06, 0.04, 0, yTop + 0.05,  0.38, roofMat);
+  addBox(g, 0.86, 0.06, 0.04, 0, yTop + 0.05, -0.38, roofMat);
+
+  if (variant === 1) {
+    // Variant B: horizontal banding stripe at 1/3 height
+    const bandY = yBot + h / 3;
+    addBox(g, 0.84, 0.04, 0.76, 0, bandY, 0, accentMat);
   }
+
+  // Window grid: 3 columns × 3 rows on south face (z = 0.37)
+  const cols = [-0.24, 0, 0.24];
+  const nRows = 3;
+  const rowH  = h / (nRows + 1);
+  for (let row = 0; row < nRows; row++) {
+    const wy = yBot + rowH * (row + 1);
+    for (const cx of cols) {
+      addBox(g, 0.10, 0.14, 0.012, cx, wy, 0.371, M.window);
+    }
+  }
+
+  // Door on ground floor center
+  addBox(g, 0.10, 0.22, 0.012, 0, yBot + 0.16, 0.371, doorMat);
 
   return g;
 }
@@ -878,8 +855,8 @@ function _createCommercialMidMesh(def, rng, plotW, plotD) {
   addBox(g, bW * 0.95, floorH * 2, bD * 0.92, 0, yBot + floorH + floorH, 0, upperMat);
   // Band between floor 2 and 3
   addBox(g, bW * 0.97, 0.04, bD * 0.94, 0, yBot + floorH * 2 + 0.02, 0, bandMat);
-  // Flat roof
-  addBox(g, bW * 0.97, 0.04, bD * 0.94, 0, yBot + h - 0.02, 0, bandMat);
+  // Flat roof (raised above top face to avoid z-fighting)
+  addBox(g, bW * 0.97, 0.04, bD * 0.94, 0, yBot + h + 0.02, 0, bandMat);
   // Entrance canopy (south)
   const canopyW = bW * 0.30;
   const canopyAngle = 0.20;

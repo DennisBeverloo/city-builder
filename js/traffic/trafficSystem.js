@@ -23,7 +23,7 @@ const LANE_OFFSET = 0.13;
 const CAR_Y_OFFSET = 0.072;
 
 /** Maximum simultaneous active cars. */
-const MAX_CARS = 150;
+const MAX_CARS = 200;
 
 /** Parked duration range [min, max] in real milliseconds. */
 const PARK_MS = [600, 1200];
@@ -308,7 +308,8 @@ export class TrafficSystem {
 
     const rate = HOUR_SPAWN_RATE[gameHour] ?? 0.1;
     // Spawn rate: up to N cars per second of real time, scaled by population and demand
-    const carsPerSec = rate * Math.min(cityState.population / 30, 3.0) * speedMult * 0.8;
+    const popScale = Math.min(cityState.population / 20, 5.0);
+    const carsPerSec = rate * popScale * speedMult * 0.8;
     this._spawnAccum += carsPerSec * (dt / 1000);
 
     while (this._spawnAccum >= 1 && this._cars.length < MAX_CARS) {
