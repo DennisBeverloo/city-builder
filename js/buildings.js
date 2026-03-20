@@ -210,19 +210,21 @@ export const BUILDINGS = {
     id: 'residential_mid', name: 'Residential (Mid)',
     category: 'zone', zoneType: 'R', size: 1,
     cost: 0, monthlyUpkeep: 0,
-    provides: { capacity: 20 },
+    // capacity = residents per tile (2× denser than residential_low at 6/tile)
+    provides: { capacity: 12 },
     requires: { power: 2, water: 2 },
     color: 0x388e3c, height: 1.8,
-    unlockAtLevel: 1, description: 'Mid-density residential. Up to 20 residents.',
+    unlockAtLevel: 1, description: 'Mid-density apartment. 12 residents/tile.',
   },
   residential_high: {
     id: 'residential_high', name: 'Residential (High)',
     category: 'zone', zoneType: 'R', size: 1,
     cost: 0, monthlyUpkeep: 0,
-    provides: { capacity: 50 },
+    // capacity = residents per tile (3.3× denser than residential_low)
+    provides: { capacity: 20 },
     requires: { power: 4, water: 4 },
     color: 0x1b5e20, height: 3.5,
-    unlockAtLevel: 1, description: 'High-density apartment block. Up to 50 residents.',
+    unlockAtLevel: 1, description: 'High-density tower. 20 residents/tile.',
   },
   commercial_mid: {
     id: 'commercial_mid', name: 'Commercial (Mid)',

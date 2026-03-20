@@ -708,13 +708,15 @@ export class City extends EventEmitter {
       if (!b || !b.def.zoneType) continue;
       // Only update on the anchor tile to avoid processing the same plot multiple times
       if (t.x !== b.tileX || t.z !== b.tileZ) continue;
-      // Low-density houses (plot-based R) are instantly occupied at placement — leave them alone.
-      if (b.def.zoneType === 'R' && (b.def.size === 1 || b.plotTiles)) continue;
+      // Low-density houses (residential_low) are instantly occupied at placement — leave them alone.
+      if (b.def.id === 'residential_low') continue;
       const prev = b.fillPercentage ?? 0.1;
       b.fillPercentage = Math.min(1.0, prev + rate * (1.0 - prev));
       if (b.def.zoneType === 'R') {
         const plotArea = (b.plotWidth ?? 1) * (b.plotDepth ?? 1);
-        b.residents = rBuildingCapacity * plotArea * b.fillPercentage;
+        // Use the building's own capacity per tile (mid/high density = more residents per tile)
+        const capacityPerTile = b.def.provides?.capacity ?? rBuildingCapacity;
+        b.residents = capacityPerTile * plotArea * b.fillPercentage;
       }
     }
   }

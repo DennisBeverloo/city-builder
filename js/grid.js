@@ -335,16 +335,15 @@ export class Grid {
     this._scene.add(mesh);
     this._bMeshes.set(this._key(ax, az), mesh);
 
-    // Low-density houses (1×1 R) are instantly occupied by a family of 3–6.
-    // High-density residential (apartments etc.) fills up gradually.
-    const isLowDensityR = def.zoneType === 'R' && def.size === 1;
+    // Only single-family houses (residential_low) are instantly occupied.
+    const isLowDensityR = def.id === 'residential_low';
     const building = {
       id: buildingId, def, mesh,
       fillPercentage: isLowDensityR ? 1.0 : (def.zoneType ? 0.1 : 1.0),
       residents:      isLowDensityR ? (3 + Math.floor(Math.random() * 4))
                     : (def.zoneType === 'R' ? (def.provides?.capacity || 6) * 0.1 : 0),
       jobs:           def.provides?.jobs || 0,
-      level:          1,
+      level: buildingId.endsWith('_high') ? 3 : buildingId.endsWith('_mid') ? 2 : 1,
       rotation,
       tileX: ax, tileZ: az,
     };
@@ -917,17 +916,24 @@ export class Grid {
       this._scene.add(garageMesh);
     }
 
-    const isLowDensityR = def.zoneType === 'R';
+    // Only single-family houses (residential_low) are instantly occupied.
+    // Mid/high density buildings fill up gradually like C and I buildings.
+    const isLowDensityR = def.id === 'residential_low';
     const plotArea      = plot.width * plot.depth;
     const building = {
       id: buildingId, def, mesh,
       gardenMesh: gardenMesh || null,
       garageMesh: garageMesh || null,
       fillPercentage: isLowDensityR ? 1.0 : 0.1,
-      // Residents and jobs scale with plot area to maintain density parity
-      residents: isLowDensityR ? (3 + Math.floor(Math.random() * 4)) : 0,
+      // Low-density: a household moves in immediately; higher-density: starts at 10% occupancy
+      residents: isLowDensityR
+        ? (3 + Math.floor(Math.random() * 4))
+        : def.zoneType === 'R'
+          ? (def.provides?.capacity ?? 6) * plotArea * 0.1
+          : 0,
       jobs: (def.provides?.jobs || 0) * plotArea,
-      level: 1,
+      // Level derived from building ID: _low=1, _mid=2, _high=3
+      level: buildingId.endsWith('_high') ? 3 : buildingId.endsWith('_mid') ? 2 : 1,
       rotation: plotRotation,
       tileX: plot.anchorX, tileZ: plot.anchorZ,
       plotWidth: plot.width, plotDepth: plot.depth,
