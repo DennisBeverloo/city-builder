@@ -202,7 +202,9 @@ export class TrafficSystem {
         car.speed = Math.min(1.0, car.speed + 1.8 * dt / 1000);
         const destDist = (car.route.length - 1 - car.routeIdx) + (1.0 - car.progress);
         if (destDist < 0.9) {
-          car.speed = Math.min(car.speed, destDist / 0.9);
+          // Floor at 0.05 so the car always crosses progress=1.0 and parks.
+          // Without this, speed→0 asymptotically and the car freezes mid-road.
+          car.speed = Math.min(car.speed, Math.max(0.05, destDist / 0.9));
         }
       }
 
