@@ -1262,7 +1262,7 @@ export class City extends EventEmitter {
     const bd  = this._rciBreakdown;
     const tot = bd?.totals ?? {};
     const pct = v => `${Math.round((v ?? 0) * 100)}%`;
-    const mk  = (label, good, note, score) => ({ label, good, note, score });
+    const mk  = (label, good, note, score) => ({ label, value: good ? '✅' : '❌', good, note, score });
     const r   = v => Math.round(v ?? 0);
 
     return {
