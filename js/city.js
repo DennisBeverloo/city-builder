@@ -356,7 +356,9 @@ export class City extends EventEmitter {
             plotWidth:       tile.building.plotWidth  ?? null,
             plotDepth:       tile.building.plotDepth  ?? null,
             plotRoadDir:     tile.building.plotRoadDir ?? null,
-            plotTiles:       tile.building.plotTiles  ?? null,
+            plotTiles:       tile.building.plotTiles
+                               ? tile.building.plotTiles.map(t => ({ x: t.x, z: t.z }))
+                               : null,
             rotation:        tile.building.rotation   ?? 0,
           };
         }
