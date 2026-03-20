@@ -341,6 +341,29 @@ html, body {
 #debug-toggle.hidden { display: none; }
 #debug-toggle:hover { color: #fff; border-color: #666; }
 
+/* ── Debug hover tooltip ── */
+#debug-tooltip {
+  position: fixed;
+  pointer-events: none;
+  z-index: 500;
+  background: rgba(6, 8, 18, 0.93);
+  border: 1px solid #39ff8a;
+  border-radius: 6px;
+  padding: 8px 11px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.75;
+  color: #c8ffd4;
+  white-space: pre;
+  max-width: 280px;
+  box-shadow: 0 0 12px rgba(57,255,138,0.18);
+}
+#debug-tooltip.hidden { display: none; }
+#debug-tooltip .dbgt-header { color: #39ff8a; font-weight: bold; margin-bottom: 2px; }
+#debug-tooltip .dbgt-key    { color: #7ecfff; }
+#debug-tooltip .dbgt-val    { color: #ffe97e; }
+#debug-tooltip .dbgt-warn   { color: #ff7e7e; }
+
 /* ── Clickable stats ── */
 .clickable-stat {
   cursor: pointer;

@@ -461,6 +461,7 @@ export class TrafficSystem {
     car._busStopKeys    = stopKeys;   // Set<"x,z"> of planned stop tiles
     car._busStopTimer   = 0;          // countdown ms remaining at current stop
     car._visitedStops   = new Set();  // prevent re-stopping at same tile
+    mesh.userData.car = car;          // back-reference for debug raycasting
     this._updateCarTransform(car);
     this._cars.push(car);
   }
@@ -489,6 +490,7 @@ export class TrafficSystem {
     this._scene.add(mesh);
 
     const car = new Car(mesh, route, carType, this._nextId++);
+    mesh.userData.car = car; // back-reference for debug raycasting
     this._updateCarTransform(car);
     this._cars.push(car);
   }
@@ -558,7 +560,7 @@ export class TrafficSystem {
       const dx   = other.mesh.position.x - car.mesh.position.x;
       const dz   = other.mesh.position.z - car.mesh.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > 0.9 || dist < 0.01) continue; // tighter radius — only cars very close ahead
+      if (dist > 1.2 || dist < 0.01) continue;
 
       // Skip cars not travelling in roughly the same direction.
       // dot product <= 0 means opposite or perpendicular — a crossing car should

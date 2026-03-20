@@ -111,6 +111,75 @@ city.emit('stateChanged', city.getState());
 city.emit('dayTick',      city.getState());
 updateRoadMarkings(grid);
 
+// ── Debug mode (?debug in URL) ────────────────────────────────────────────────
+
+const DEBUG_MODE = new URLSearchParams(window.location.search).has('debug');
+window._debugMode = DEBUG_MODE;
+
+const _debugTooltipEl = document.getElementById('debug-tooltip');
+
+/** Position and populate the debug hover tooltip. */
+function _showDebugTooltip(clientX, clientY, html) {
+  _debugTooltipEl.innerHTML = html;
+  _debugTooltipEl.classList.remove('hidden');
+  // Keep tooltip 16 px away from cursor; flip if near right/bottom edge
+  const W = window.innerWidth, H = window.innerHeight;
+  const tw = _debugTooltipEl.offsetWidth  || 220;
+  const th = _debugTooltipEl.offsetHeight || 120;
+  const x = clientX + 18 + tw > W ? clientX - tw - 12 : clientX + 18;
+  const y = clientY + 18 + th > H ? clientY - th - 12 : clientY + 18;
+  _debugTooltipEl.style.left = `${x}px`;
+  _debugTooltipEl.style.top  = `${y}px`;
+}
+function _hideDebugTooltip() { _debugTooltipEl.classList.add('hidden'); }
+
+/** Walk up Three.js parent chain to find userData.car. */
+function _carFromHit(obj) {
+  while (obj) {
+    if (obj.userData?.car) return obj.userData.car;
+    obj = obj.parent;
+  }
+  return null;
+}
+
+/** Build HTML for a car debug tooltip. */
+function _carDebugHtml(car) {
+  const r  = v => (typeof v === 'number' ? v.toFixed(3) : v ?? '—');
+  const kv = (k, v, warn) =>
+    `<span class="dbgt-key">${k}:</span> <span class="${warn ? 'dbgt-warn' : 'dbgt-val'}">${v}</span>`;
+  const pos = car.mesh.position;
+  return [
+    `<div class="dbgt-header">🚗 Car #${car.id} (${car.type})</div>`,
+    kv('state',     car.state, car.state === 'waiting'),
+    kv('speed',     r(car.speed)),
+    kv('route',     `${car.routeIdx} / ${car.route.length - 1}`),
+    kv('progress',  r(car.progress)),
+    kv('waitTimer', car.state === 'waiting' ? `${Math.round(car.waitTimer)} ms` : '—'),
+    kv('pos',       `(${r(pos.x)}, ${r(pos.z)})`),
+  ].join('\n');
+}
+
+/** Build HTML for a tile debug tooltip. */
+function _tileDebugHtml(tile) {
+  const r  = v => (typeof v === 'number' ? v.toFixed(1) : v ?? '—');
+  const kv = (k, v) =>
+    `<span class="dbgt-key">${k}:</span> <span class="dbgt-val">${v}</span>`;
+  const rows = [
+    `<div class="dbgt-header">🗺️ Tile [${tile.x}, ${tile.z}]</div>`,
+    kv('type',      tile.type ?? '—'),
+    kv('zone',      tile.zoneType ?? '—'),
+  ];
+  if (tile.type === 'road') rows.push(kv('connected', tile.connected ? 'yes' : 'no'));
+  if (tile.happiness   != null) rows.push(kv('happiness',  `${Math.round(tile.happiness)}%`));
+  if (tile.pollution   != null) rows.push(kv('pollution',  r(tile.pollution)));
+  if (tile.landValue   != null) rows.push(kv('land value', r(tile.landValue)));
+  if (tile.residents   != null) rows.push(kv('residents',  `${tile.residents} / ${tile.capacity ?? '?'}`));
+  if (tile.jobs        != null) rows.push(kv('jobs',       `${tile.jobs} / ${tile.jobCapacity ?? '?'}`));
+  if (tile.plotId      != null) rows.push(kv('plotId',     tile.plotId));
+  if (tile.buildingId  != null) rows.push(kv('building',   tile.buildingId));
+  return rows.join('\n');
+}
+
 // ── Raycasting ───────────────────────────────────────────────────────────────
 
 const raycaster  = new THREE.Raycaster();
@@ -474,6 +543,24 @@ canvas.addEventListener('mousemove', e => {
     _clearGhostMesh();
     grid.clearPreview();
     grid.setHover(tile);
+  }
+
+  // ── Debug tooltip ────────────────────────────────────────────────
+  if (DEBUG_MODE) {
+    // First: check if mouse is over a car (recursive — car meshes are Groups)
+    const activeCars = trafficSystem.getCars().filter(c => c.mesh.visible);
+    const carMeshes  = activeCars.map(c => c.mesh);
+    const carHits    = raycaster.intersectObjects(carMeshes, true);
+    if (carHits.length) {
+      const car = _carFromHit(carHits[0].object);
+      if (car) { _showDebugTooltip(e.clientX, e.clientY, _carDebugHtml(car)); return; }
+    }
+    // Fall back to tile
+    if (tile) {
+      _showDebugTooltip(e.clientX, e.clientY, _tileDebugHtml(tile));
+    } else {
+      _hideDebugTooltip();
+    }
   }
 });
 
