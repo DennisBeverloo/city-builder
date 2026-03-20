@@ -510,17 +510,17 @@ export class Grid {
    */
   static get SERVICE_COVERAGE_MAP() {
     return {
-      police_station: { field: 'police',    strength: 40 },
-      fire_station:   { field: 'fire',      strength: 40 },
-      hospital:       { field: 'hospital',  strength: 40 },
-      primary_school: { field: 'education', strength: 25 },
-      high_school:    { field: 'education', strength: 50 },
-      university:     { field: 'education', strength: 75 },
-      park_small:     { field: 'parks',     strength: 15 },
-      park_medium:    { field: 'parks',     strength: 38 },
-      park_large:     { field: 'parks',     strength: 65 },
-      tennis_court:   { field: 'parks', strength: 35 },
-      football_field: { field: 'parks', strength: 50 },
+      police_station: { field: 'police',    strength: 60 },
+      fire_station:   { field: 'fire',      strength: 60 },
+      hospital:       { field: 'hospital',  strength: 65 },
+      primary_school: { field: 'education', strength: 40 },
+      high_school:    { field: 'education', strength: 70 },
+      university:     { field: 'education', strength: 100 },
+      park_small:     { field: 'parks',     strength: 30 },
+      park_medium:    { field: 'parks',     strength: 55 },
+      park_large:     { field: 'parks',     strength: 80 },
+      tennis_court:   { field: 'parks',     strength: 80 },
+      football_field: { field: 'parks',     strength: 120 },
     };
   }
 
@@ -572,11 +572,11 @@ export class Grid {
     for (const t of this.getAllTiles()) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.20;
-      score += sc.fire      * 0.18;
-      score += sc.hospital  * 0.48;
-      score += sc.education * 0.52;
-      score += sc.parks     * 0.65;
+      score += sc.police    * 0.28;
+      score += sc.fire      * 0.25;
+      score += sc.hospital  * 0.60;
+      score += sc.education * 0.65;
+      score += sc.parks     * 0.80;
       score -= t.pollution  * 0.50;
       t.happiness = Math.max(0, Math.min(100, score));
     }
@@ -602,17 +602,31 @@ export class Grid {
       }
     }
 
+    // 4a-ii: Parks, tennis courts and football fields reduce nearby pollution
+    const PARK_IDS = new Set(['park_small','park_medium','park_large','tennis_court','football_field']);
+    for (const t of tiles) {
+      if (!t.building || !PARK_IDS.has(t.building.id)) continue;
+      if (t.x !== t.building.tileX || t.z !== t.building.tileZ) continue;
+      const radius   = t.building.def.provides?.radius ?? 0;
+      const strength = Grid.SERVICE_COVERAGE_MAP[t.building.id]?.strength ?? 0;
+      if (!radius) continue;
+      for (const { tile, dist } of this.getTilesInRadius(t.x, t.z, radius)) {
+        const falloff  = 1 - dist / radius;
+        tile.pollution = Math.max(0, tile.pollution - strength * 0.20 * falloff);
+      }
+    }
+
     // 4b: Desirability — uses previous tick's happiness (lagging is intentional)
     for (const t of tiles) {
       const sc = t.serviceCoverage;
       let score = 50;
-      score += sc.police    * 0.10;
-      score += sc.fire      * 0.10;
-      score += sc.hospital  * 0.18;
-      score += sc.education * 0.22;  // schools & unis raise land value noticeably
-      score += sc.parks     * 0.28;  // parks & sports directly raise desirability
+      score += sc.police    * 0.20;
+      score += sc.fire      * 0.20;
+      score += sc.hospital  * 0.30;
+      score += sc.education * 0.50;
+      score += sc.parks     * 0.45;
       score -= t.pollution  * 0.40;
-      score += t.happiness  * 0.10;
+      score += t.happiness  * 0.12;
       t.desirability = Math.max(0, Math.min(100, score));
     }
 

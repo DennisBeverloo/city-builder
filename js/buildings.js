@@ -45,7 +45,7 @@ export const BUILDINGS = {
     id: 'police_station', name: 'Police Station',
     category: 'service', size: [2, 2],
     cost: 8000, monthlyUpkeep: 1500,
-    provides: { crime_reduction: 20, radius: 8, jobs: 8 },
+    provides: { crime_reduction: 20, happiness: 10, radius: 8, jobs: 8 },
     requires: { power: 3, water: 1 },
     color: 0x1565c0, height: 1.2,
     unlockAtLevel: 1, description: 'Reduces crime, radius 8. 8 jobs.',
@@ -54,7 +54,7 @@ export const BUILDINGS = {
     id: 'fire_station', name: 'Fire Station',
     category: 'service', size: [2, 2],
     cost: 8000, monthlyUpkeep: 1500,
-    provides: { fire_protection: 20, radius: 8, jobs: 6 },
+    provides: { fire_protection: 20, happiness: 8, radius: 8, jobs: 6 },
     requires: { power: 2, water: 2 },
     color: 0xf44336, height: 1.2,
     unlockAtLevel: 1, description: 'Fire protection, radius 8. 6 jobs.',
@@ -63,7 +63,7 @@ export const BUILDINGS = {
     id: 'hospital', name: 'Hospital',
     category: 'service', size: [3, 2],
     cost: 25000, monthlyUpkeep: 4000,
-    provides: { happiness: 15, radius: 12, jobs: 25 },
+    provides: { happiness: 25, radius: 14, jobs: 25 },
     requires: { power: 5, water: 4 },
     color: 0xeceff1, height: 1.8,
     unlockAtLevel: 2, description: '+15 happiness, radius 12. 25 jobs.',
@@ -72,7 +72,7 @@ export const BUILDINGS = {
     id: 'primary_school', name: 'Primary School',
     category: 'service', size: [2, 2],
     cost: 5000, monthlyUpkeep: 1000,
-    provides: { edu_level: 1, happiness: 5, radius: 6, jobs: 6 },
+    provides: { edu_level: 1, happiness: 5, radius: 14, jobs: 6 },
     requires: { power: 2, water: 1 },
     color: 0xffeb3b, height: 1.0,
     unlockAtLevel: 1, description: '+5 happiness, edu+1, radius 6. 6 jobs.',
@@ -81,7 +81,7 @@ export const BUILDINGS = {
     id: 'high_school', name: 'High School',
     category: 'service', size: [3, 2],
     cost: 12000, monthlyUpkeep: 2500,
-    provides: { edu_level: 2, happiness: 8, radius: 10, jobs: 12 },
+    provides: { edu_level: 2, happiness: 8, radius: 20, jobs: 12 },
     requires: { power: 3, water: 2 },
     color: 0xff9800, height: 1.3,
     unlockAtLevel: 2, description: '+8 happiness, edu+2, radius 10. 12 jobs.',
@@ -90,7 +90,7 @@ export const BUILDINGS = {
     id: 'university', name: 'University',
     category: 'service', size: [4, 3],
     cost: 30000, monthlyUpkeep: 6000,
-    provides: { edu_level: 3, happiness: 12, radius: 15, jobs: 40 },
+    provides: { edu_level: 3, happiness: 12, radius: 30, jobs: 40 },
     requires: { power: 8, water: 4 },
     color: 0x9c27b0, height: 2.2,
     unlockAtLevel: 3, description: '+12 happiness, edu+3, radius 15. 40 jobs.',
@@ -126,7 +126,7 @@ export const BUILDINGS = {
       id: 'tennis_court', name: 'Tennis Court',
       category: 'service', size: [2, 2],
       cost: 2000, monthlyUpkeep: 200,
-      provides: { happiness: 8, radius: 5, jobs: 2 },
+      provides: { happiness: 25, radius: 10, jobs: 2 },
       requires: {},
       color: 0x4db6ac, height: 0.02,
       unlockAtLevel: 1, description: '+8 happiness in radius 5. 2 jobs.',
@@ -135,7 +135,7 @@ export const BUILDINGS = {
       id: 'football_field', name: 'Football Field',
       category: 'service', size: [3, 2],
       cost: 4000, monthlyUpkeep: 400,
-      provides: { happiness: 14, radius: 7, jobs: 4 },
+      provides: { happiness: 40, radius: 14, jobs: 4 },
       requires: {},
       color: 0x2e7d32, height: 0.02,
       unlockAtLevel: 2, description: '+14 happiness in radius 7. 4 jobs.',
@@ -880,36 +880,116 @@ function _i3Tank(def, rng) {
 }
 
 function _createIndustrialMesh(def, rng, plotW = 1, plotD = 1) {
-  // Level 1 industrial: low flat warehouse filling most of the plot
   const g    = new THREE.Group();
   const h    = def.height;
   const yBot = -h / 2;
 
-  const bW = plotW * 0.80;
-  const bD = plotD * 0.80;
-  const bodyH = 0.32;
+  const bW = plotW * 0.70;
+  const bD = plotD * 0.70;
+  const variant = rng();
 
-  const wallMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
-  const roofMat = cachedMat(0x78909c); // flat metal roof
+  if (variant < 0.34) {
+    // ── Variant A: Warehouse (flat roof, roll-up door) ──────────────────────
+    const bodyH   = 0.32;
+    const wallMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
+    const roofMat = cachedMat(0x78909c);
+    addBox(g, bW, bodyH, bD, 0, yBot + bodyH / 2, 0, wallMat);
+    addBox(g, bW + 0.04, 0.025, bD + 0.04, 0, yBot + bodyH + 0.012, 0, roofMat);
+    const doorW = Math.min(bW * 0.45, 0.36);
+    addBox(g, doorW, bodyH * 0.75, 0.012, 0, yBot + bodyH * 0.375, bD / 2 + 0.006, M.garageDark);
+    addBox(g, 0.10, 0.07, 0.012, -bW * 0.28, yBot + bodyH * 0.82, bD / 2 + 0.006, M.window);
+    addBox(g, 0.10, 0.07, 0.012,  bW * 0.28, yBot + bodyH * 0.82, bD / 2 + 0.006, M.window);
+    addRoundChimney(g, bW * 0.25, -bD * 0.25, 0.12, yBot + bodyH + 0.025);
 
-  // Main warehouse body — wide and low
-  addBox(g, bW, bodyH, bD, 0, yBot + bodyH / 2, 0, wallMat);
+  } else if (variant < 0.67) {
+    // ── Variant B: Factory (slanted roof + large chimney) ────────────────────
+    const wallH   = 0.30;
+    const wallMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
+    // Main body
+    addBox(g, bW, wallH, bD, 0, yBot + wallH / 2, 0, wallMat);
+    // Slanted ridge roof — two angled panels as thin boxes leaning toward centre
+    const ridgeH   = 0.18;
+    const panelW   = bW / 2 + 0.02;
+    const panelMat = cachedMat(0x607d8b);
+    for (const side of [-1, 1]) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(panelW, 0.025, bD + 0.04),
+        panelMat
+      );
+      panel.position.set(side * panelW / 2, yBot + wallH + ridgeH / 2, 0);
+      panel.rotation.z = side * 0.48; // ~27 degrees
+      panel.castShadow = panel.receiveShadow = true;
+      g.add(panel);
+    }
+    // Ridge cap
+    addBox(g, 0.06, ridgeH + 0.03, bD + 0.06, 0, yBot + wallH + ridgeH / 2, 0, cachedMat(0x78909c));
+    // Large chimney
+    const chiH = 0.50;
+    addRoundChimney(g, -bW * 0.30, -bD * 0.28, chiH, yBot + wallH + chiH / 2);
+    // Small windows on long wall
+    const nWin = Math.max(1, Math.round(bW / 0.45));
+    for (let i = 0; i < nWin; i++) {
+      const wx = (i - (nWin - 1) / 2) * (bW / nWin);
+      addBox(g, 0.12, 0.09, 0.012, wx, yBot + wallH * 0.65, bD / 2 + 0.006, M.window);
+    }
 
-  // Flat roof slab with slight overhang
-  const overhang = 0.04;
-  addBox(g, bW + overhang, 0.025, bD + overhang, 0, yBot + bodyH + 0.012, 0, roofMat);
+  } else {
+    // ── Variant C: Silo complex (silos + office block) ──────────────────────
+    const officeW = Math.min(bW * 0.45, 0.60);
+    const officeD = bD;
+    const officeH = 0.26;
+    const officeMat = cachedMat(pick(rng, INDUSTRIAL_WALL));
+    // Office building on one side
+    addBox(g, officeW, officeH, officeD, -bW / 2 + officeW / 2 + 0.02, yBot + officeH / 2, 0, officeMat);
+    addBox(g, officeW + 0.03, 0.02, officeD + 0.03, -bW / 2 + officeW / 2 + 0.02, yBot + officeH + 0.01, 0, cachedMat(0x546e7a));
+    // Silos (cylinders) on other side
+    const siloMat   = cachedMat(0xb0bec5);
+    const siloCapMat = cachedMat(0x78909c);
+    const siloX0    = bW / 2 - 0.18;
+    const siloSpacing = Math.min(0.36, (bD - 0.10) / 2.5);
+    const siloCount  = Math.min(3, Math.max(1, Math.round(bD / siloSpacing)));
+    const siloRadius = 0.13;
+    const siloH     = 0.48;
+    for (let i = 0; i < siloCount; i++) {
+      const sz = (i - (siloCount - 1) / 2) * siloSpacing;
+      const silo = new THREE.Mesh(
+        new THREE.CylinderGeometry(siloRadius, siloRadius, siloH, 10),
+        siloMat
+      );
+      silo.position.set(siloX0, yBot + siloH / 2, sz);
+      silo.castShadow = silo.receiveShadow = true;
+      g.add(silo);
+      // Cone cap
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(siloRadius + 0.01, 0.12, 10), siloCapMat);
+      cap.position.set(siloX0, yBot + siloH + 0.05, sz);
+      cap.castShadow = true;
+      g.add(cap);
+    }
+  }
 
-  // Roll-up door on south face (road-facing)
-  const doorW = Math.min(bW * 0.45, 0.36);
-  addBox(g, doorW, bodyH * 0.75, 0.012, 0, yBot + bodyH * 0.375, bD / 2 + 0.006, M.garageDark);
+  // ── Industrial props in the remaining ~30% area ──────────────────────────
+  // Place some barrels/containers along edges outside the building footprint
+  const propAreaX = plotW / 2 - bW / 2 - 0.05; // gap between building and plot edge
+  const propAreaZ = plotD / 2 - bD / 2 - 0.05;
+  const barrelMat = cachedMat(pick(rng, [0xef6c00, 0x1565c0, 0x37474f]));
 
-  // Small high windows south
-  const winOffX = bW * 0.30;
-  addBox(g, 0.10, 0.07, 0.012, -winOffX, yBot + bodyH * 0.80, bD / 2 + 0.006, M.window);
-  addBox(g, 0.10, 0.07, 0.012,  winOffX, yBot + bodyH * 0.80, bD / 2 + 0.006, M.window);
-
-  // Small vent/chimney detail on roof (NE area)
-  addRoundChimney(g, bW * 0.25, -bD * 0.25, 0.12, yBot + bodyH + 0.025);
+  // A few barrels if there's room
+  if (propAreaX > 0.12 || propAreaZ > 0.12) {
+    const nBarrels = 2 + Math.floor(rng() * 3);
+    for (let i = 0; i < nBarrels; i++) {
+      const bx = (rng() - 0.5) * (plotW * 0.85);
+      const bz = (rng() - 0.5) * (plotD * 0.85);
+      // Only place in the margin area (outside the building footprint)
+      if (Math.abs(bx) < bW / 2 + 0.08 && Math.abs(bz) < bD / 2 + 0.08) continue;
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, 0.13, 6),
+        cachedMat(pick(rng, [0xef6c00, 0x1565c0, 0x37474f, 0x424242]))
+      );
+      barrel.position.set(bx, yBot + 0.065, bz);
+      barrel.castShadow = true;
+      g.add(barrel);
+    }
+  }
 
   return g;
 }
@@ -1026,9 +1106,10 @@ function _createHospital(def) {
   addBox(g, bboxW - 0.20, 0.36, bboxD - 0.10, 0, yBot + 1.58, 0, wingMat);
   // Flat roof
   addBox(g, bboxW, 0.05, bboxD, 0, yBot + 1.425, 0, roofMat);
-  // Red cross on roof
-  addBox(g, 0.40, 0.06, 0.12, 0, yBot + 1.46, 0, M.fireRed);
-  addBox(g, 0.12, 0.06, 0.40, 0, yBot + 1.46, 0, M.fireRed);
+  // Red cross on roof — raised well above roof so it's visible from isometric view
+  const crossY = yBot + 1.56;
+  addBox(g, 0.80, 0.10, 0.26, 0, crossY, 0, M.fireRed);
+  addBox(g, 0.26, 0.10, 0.80, 0, crossY, 0, M.fireRed);
   // Entrance canopy (south)
   addBox(g, 0.60, 0.06, 0.20, 0, yBot + 0.80, bboxD / 2 + 0.10, accentMat);
   // Entrance door
